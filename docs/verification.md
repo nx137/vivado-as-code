@@ -291,7 +291,38 @@ RESULT: PASS
 
 ## V19 — 全量构建（-StopAfter impl）
 
-见下节实测数字（本机 Vivado 2020.2，12 并发）。
+| 项目 | 结果 |
+|---|---|
+| 耗时 | **16.1 分钟**（961 s，12 并发） |
+| 产物 | `.bit` 3.95 MB、`.hwh` 827 KB、timing/utilization 报告 |
+| 资源 | LUT 28250 (53.1%)、FF 7194 (6.8%)、BRAM 4.5 (3.2%)、DSP 3 |
+| 时序 | ❌ **WNS = -0.070 ns**（TNS -0.070，仅 1 条失败路径） |
+| 门禁 | 正确以退出码 3 拦下（Vivado 本身退出码 0、bit 照出） |
+
+违例路径：
+
+```
+Source:      axi_gpio_loop/U0/gpio_core_1/Dual.gpio_Data_Out_reg[13]_replica_5/C
+Destination: loop_player_0/inst/bram_reg_15040_15103_9_11/RAMA/WADR2
+Path Group:  clk_fpga_0 (10 ns)
+Data Path:   9.629ns = logic 0.379ns + route 9.250ns   (96% route, 0 logic levels)
+```
+
+结论：这是**布局布线主导的边际违例**，属于原工程既有问题（不在本次接入改动范围内）。
+门禁的价值正在于此：Vivado 认为"构建成功"，但设计其实差 70 ps。
+
+## V20 — A/B 对照：同工具链、不打修复补丁
+
+为了排除"接入改动（NUM_SI 3→2、S2MM 中断连线、预留 tvalid 接常量）引入了时序退化"：
+
+```powershell
+scripts/build.ps1 -ProjectRoot . `
+    -RebuildScript vivado/rebuild_vac_orig.tcl -StopAfter impl
+```
+
+（`rebuild_vac_orig.tcl` 与正式适配器相同，只是 `VAC_PATCH_TCL` 不含 `patch_fix_bd_issues.tcl`）
+
+对照结果：见下方实测补记。
 
 ## 接入过程对工具链的改进
 

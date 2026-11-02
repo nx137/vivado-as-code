@@ -107,13 +107,38 @@ connections added: 12 条
 
 一眼就能看出"FM 补丁加了什么、我们修了什么"，而不是 700 行 TCL 的文本 diff。
 
-## 5. 构建结果
+## 5. 构建结果（本机 Vivado 2020.2，12 并发）
 
 | 阶段 | 结果 |
 |---|---|
-| BD 阶段（`-StopAfter bd`） | 0.8 分钟，20 IP + 12 RTL module_ref，`.hwh` 830 KB |
-| 产物一致性（`check_handoff.py`，用**导出后的 BD** 对比 `.hwh`） | PASS（32 MODULE 全部对上） |
-| 全量（`-StopAfter impl`） | 见 `docs/verification.md` 的 V15 |
+| BD 阶段（`-StopAfter bd`） | **0.8 分钟**，20 IP + 12 RTL module_ref，`.hwh` 827 KB |
+| 产物一致性（`check_handoff.py`，用**导出后的 BD** 对比 `.hwh`） | **PASS**（32 MODULE 全部对上） |
+| 全量（`-StopAfter impl`） | **16.1 分钟**，`.bit` 3.95 MB，LUT 53.1% / FF 6.8% / BRAM 3.2% |
+| 时序门禁 | ❌ **WNS = -0.070 ns**（单条违例），门禁以退出码 3 拦下 |
+
+### 5.1 时序违例分析（门禁抓到的第 4 个真实问题）
+
+```
+Slack (VIOLATED): -0.070ns
+Source:      axi_gpio_loop/U0/gpio_core_1/Dual.gpio_Data_Out_reg[13]_replica_5/C
+Destination: loop_player_0/inst/bram_reg_15040_15103_9_11/RAMA/WADR2
+Path Group:  clk_fpga_0 (10 ns)
+Data Path:   9.629ns = logic 0.379ns + route 9.250ns   ← 96% 是布线延迟，0 级逻辑
+```
+
+特征：**只有 1 条路径违例、0 级逻辑、96% 是布线**，属于布局布线主导的边际违例
+（不是逻辑太深）。这条路径（`axi_gpio_loop` 输出寄存器 → `loop_player` 的 BRAM 写地址）
+不在本次接入改动范围内（我们改的是 `NUM_SI`、S2MM 中断连线、两个预留 `tvalid` 的常量），
+所以判为**原工程既有的边际违例**；对照实验（同工具链、不打修复补丁）见
+`docs/verification.md` 的 V20。
+
+给工程所有者的建议（按成本从低到高）：
+
+1. `launch_runs impl_1 -jobs 12` + `-directive Explore`（换布局策略，边际违例常能翻正）；
+2. 给这条路径加 `set_multicycle_path` 或把 `axi_gpio_loop` 的输出先在本地打一拍
+   （它在 BD 里直接驱动 `loop_player` 的 BRAM 地址，跨了半片器件）；
+3. 用 Pblock 把 `loop_player` 约束到 `axi_gpio_loop` 附近；
+4. 时序目标放宽到实际板上 55.56 MHz（若 BD 设计值仍是 100 MHz，按实际时钟约束可释放裕量）。
 
 > 注意：`check_handoff` 要拿"构建后导出的 BD"（`VAC_EXPORT_BD`）去比 `.hwh`；
 > 用原始 `bd_design_1.tcl` 比会漏掉补丁新增的 IP，那是预期行为。

@@ -105,6 +105,30 @@ vivado -mode batch -source tcl/mk_min_bd.tcl     # 生成 tcl/design_1.tcl（只
 ../../scripts/build.ps1 -ProjectRoot . -StopAfter bd
 ```
 
+### 4.5 接入已有工程（不改原布局）
+
+已有工程常把 RTL/XDC 放在 `vivado/` 下、BD 在 `vivado/tcl/`、产物要改名拷到 PYNQ 目录。
+写一个 20 行的适配器，用 `-RebuildScript` 切进来即可，原 `build.bat` 保留不动：
+
+```tcl
+# vivado/rebuild_vac.tcl
+set env(VAC_ROOT)          [file dirname [file dirname [file normalize [info script]]]]
+set env(VAC_SRC_DIR)       vivado/src
+set env(VAC_XDC_DIR)       vivado/xdc
+set env(VAC_BD_TCL)        vivado/tcl/bd_design_1.tcl
+set env(VAC_PATCH_TCL)     vivado/tcl/bd_add_fm_modem.tcl
+set env(VAC_POST_BD_TCL)   vivado/tcl/post_bd_uart_aclk.tcl
+set env(VAC_COPY_TO)       software/pynq/main
+set env(VAC_ARTIFACT_NAME) xinhao_uart_kb_adf4351_rf
+source [file join $env(VIVADO_AS_CODE) templates rebuild.tcl]
+```
+
+```bash
+scripts/build.ps1 -ProjectRoot . -RebuildScript vivado/rebuild_vac.tcl -StopAfter bd
+```
+
+实测记录与可抄的适配文件：[`examples/real-project-adoption/`](examples/real-project-adoption/)。
+
 ## 5. 仓库结构
 
 ```
