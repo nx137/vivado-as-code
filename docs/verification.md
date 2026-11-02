@@ -350,3 +350,61 @@ scripts/build.ps1 -ProjectRoot . `
 | `VAC_CHECK_ALLOW` + 项目级 `.vac-lint-allow` | 补丁中间态噪声需要"可审计的白名单" |
 | module_ref 变量形式解析（bd_diff / check_handoff） | 真实 BD 用变量声明 module_ref |
 | MCP `vac_build` 支持 `rebuild_script` | 接入工程用自己的适配入口 |
+---
+
+# v0.3 验证（2026-11-02）
+
+## V21 — PS7 声明式配置
+
+```bash
+python scripts/ps7_config.py check examples/ps7/ps7.example.yaml
+python scripts/ps7_config.py render ps7.yaml --out tcl/post_bd_ps7.tcl
+VAC_POST_BD_TCL=tcl/post_bd_ps7.tcl scripts/build.ps1 -ProjectRoot . -StopAfter bd
+```
+
+单元测试：`tests/test_ps7_config.py` **24 个用例**通过（YAML 子集解析、schema 校验、
+Tcl 生成、CLI、proc 作用域/表达式回归）。
+
+端到端（示例工程，`clocks.fclk0: 150`）：
+
+```
+[ps7] FCLK0 = 150 MHz (ACT=150.000000)
+[ps7] HP 口: 0=1 1=0 2=0 3=0
+[ps7] DDR highaddr = 0x3FFFFFFF
+[ps7] 配置完成
+RESULT: PASS   (0 ERROR / 0 CRITICAL)
+```
+
+生成物包含"设置 + 回读断言"：频率偏差 >0.01 MHz 直接 `exit 1`，IRQ/DDR 也回读打印。
+
+## V22 — 跨 Vivado 版本升级助手（同版本往返）
+
+```bash
+vivado -mode batch -source scripts/bd_upgrade.tcl -tclargs \
+    tcl/design_1.tcl upgraded_design_1.tcl xc7z020clg400-2
+```
+
+结果：✅ 退出码 0，日志 **0 ERROR / 0 CRITICAL**，导出新真源 15,470 bytes。
+
+回归：
+
+| 检查 | 结果 |
+|---|---|
+| 用升级后的 BD TCL 重建 BD | ✅ 0.4 分钟，`RESULT: PASS`，0 CRITICAL |
+| `bd_diff.py` 对比升级前后 | ✅ `no semantic changes` |
+
+> 同版本往返是"升级流程不破坏设计"的基线；真正跨版本（如 2020.2 → 2022.2）时脚本会
+> 执行 `upgrade_ip`，打印升级前后 IPDEF 列表，需按 `references/version-upgrade.md` 做回归。
+
+## V23 — MCP 扩到 8 个工具
+
+新增 `vac_ps7_render` / `vac_bd_upgrade`；`tests/test_mcp_protocol.py` 覆盖：
+tools/list 返回 8 个工具、`vac_ps7_render` 生成 Tcl 文件、协议错误码不变。
+
+## V24 — 全套英文文档
+
+- `README.en.md`：完整英文 README（与中文版结构一致）；
+- `SKILL.en.md`：完整英文技能入口（铁律、决策表、脚本表、环境变量、边界）；
+- 两份文档与中文版互相链接。
+
+测试总数：**74 个**（新增 PS7 24 个 + 变量 module_ref 2 个 + 既有 48 个）。

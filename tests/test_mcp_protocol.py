@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import tempfile
 import sys
 import unittest
 from pathlib import Path
@@ -59,6 +60,7 @@ class McpProtocolTest(unittest.TestCase):
         self.assertEqual(names, {
             "vac_build", "vac_check_log", "vac_bd_diff",
             "vac_bd_export", "vac_check_handoff", "vac_recipe_render",
+            "vac_ps7_render", "vac_bd_upgrade",
         })
         for tool in tools:
             self.assertIn("description", tool)
@@ -99,11 +101,24 @@ class McpProtocolTest(unittest.TestCase):
         result = responses[0]["result"]
         self.assertTrue(result["isError"], err)
 
+    def test_ps7_render_tool(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / "post_bd_ps7.tcl"
+            responses, err = run_session([
+                {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                 "params": {"name": "vac_ps7_render",
+                            "arguments": {"ps7_yaml": str(ROOT / "examples" / "ps7" / "ps7.example.yaml"),
+                                          "out_path": str(out)}}},
+            ])
+            payload = json.loads(responses[0]["result"]["content"][0]["text"])
+            self.assertTrue(payload["ok"], err)
+            self.assertIn("PCW_FPGA0_PERIPHERAL_FREQMHZ", out.read_text(encoding="utf-8"))
+
     def test_self_test_flag(self) -> None:
         proc = subprocess.run([sys.executable, str(SERVER), "--self-test"],
                               capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertIn("tools=6", proc.stderr)
+        self.assertIn("tools=8", proc.stderr)
 
 
 if __name__ == "__main__":

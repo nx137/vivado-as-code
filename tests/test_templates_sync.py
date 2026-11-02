@@ -35,6 +35,14 @@ class RepoConsistencyTest(unittest.TestCase):
         self.assertIsNotNone(m)
         self.assertEqual(m.group(1), "vivado-as-code")
 
+    def test_skill_en_frontmatter(self) -> None:
+        en = ROOT / "SKILL.en.md"
+        self.assertTrue(en.is_file(), "缺少英文 SKILL")
+        text = normalized(en)
+        self.assertTrue(text.startswith("---\n"))
+        self.assertIn("name: vivado-as-code", text)
+        self.assertIn("license: MIT", text)
+
     def test_scripts_have_no_bom(self) -> None:
         """Python 脚本不能被写入 BOM（会让 shebang/首行解析出问题）。"""
         for p in (ROOT / "scripts").glob("*.py"):

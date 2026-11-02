@@ -1,0 +1,31 @@
+# ps7.yaml —— Zynq PS7 声明式配置示例
+part: xc7z020clg400-2
+
+# FCLK（MHz）；写 0 表示关闭
+clocks:
+  fclk0: 100
+  fclk1: 200
+  fclk2: 0
+  fclk3: 0
+
+# 启用的 S_AXI_HP 口
+hp_ports: [0, 1]
+
+# PL→PS 中断
+irq_f2p: true
+
+# MIO 外设（io 必须与板卡原理图一致）
+mio:
+  uart1: {enable: true, io: "MIO 48 .. 49"}
+  sdio0: {enable: true, io: "MIO 40 .. 45"}
+  enet0: {enable: true, io: "MIO 16 .. 27"}
+  qspi:  {enable: true, single_ss: true}
+  usb0:  {enable: false}
+
+# DDR 容量（GB）→ PCW_DDR_RAM_HIGHADDR
+ddr:
+  size_gb: 1
+
+# 逃生口：直接写 PCW_* 属性
+extra_props:
+  PCW_USE_M_AXI_GP0: 1

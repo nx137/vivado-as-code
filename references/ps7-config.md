@@ -157,3 +157,48 @@ DDS 和 FFT 用同一个错 `FS` 时两者互相抵消，**读数自洽但硬件
 2. UART Lite 这类按 `C_S_AXI_ACLK_FREQ_HZ` 算分频的 IP，要把属性写成板上实际频率（如 55560000）；
 3. 换 PYNQ 镜像/换板后重新校准；
 4. 时序分析仍按 BD 的设计值做（100 MHz 收敛则 55.56 MHz 裕量充足）。
+
+## 5. 声明式配置（v0.3 推荐做法）
+
+手写 `CONFIG.PCW_*` 容易写错参数名（Vivado 只报 CRITICAL WARNING），也看不出设计意图。
+把意图写进 `ps7.yaml`，由 `scripts/ps7_config.py` 生成"设置 + 回读断言"的 Tcl：
+
+```yaml
+# ps7.yaml
+clocks:
+  fclk0: 150          # MHz；写 0 表示关闭
+  fclk1: 200
+hp_ports: [0, 1]
+irq_f2p: true
+mio:
+  uart1: {enable: true, io: "MIO 48 .. 49"}
+  sdio0: {enable: true, io: "MIO 40 .. 45"}
+ddr:
+  size_gb: 1
+extra_props:           # 逃生口：直接写 PCW_* 属性
+  PCW_USE_M_AXI_GP0: 1
+```
+
+```bash
+python scripts/ps7_config.py check  ps7.yaml                       # 只校验
+python scripts/ps7_config.py render ps7.yaml --out tcl/post_bd_ps7.tcl
+```
+
+挂到构建：
+
+```powershell
+$env:VAC_POST_BD_TCL = "tcl/post_bd_ps7.tcl"     # 相对路径按项目根解析
+scripts/build.ps1 -ProjectRoot . -StopAfter bd
+```
+
+生成物包含两类内容：
+
+1. `set_property CONFIG.PCW_*`（只写"用户意图"，不写 ACT/分频）；
+2. **回读断言**：`_ps7_check_freq` 用 `get_property CONFIG.PCW_ACT_FPGA<n>_PERIPHERAL_FREQMHZ`
+   比较实际频率，偏差 >0.01 MHz 直接 `exit 1`；IRQ/DDR 也回读打印。
+
+实测（示例工程）：`fclk0: 150` → 构建日志出现
+`[ps7] FCLK0 = 150 MHz (ACT=150.000000)`，0 CRITICAL。
+
+schema 是**严格**的：未知键（如把 `clocks` 写成 `clock`）直接报错，避免拼错被静默忽略。
+支持的键见脚本头部 docstring，或 `python scripts/ps7_config.py example`。

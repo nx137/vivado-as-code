@@ -1,7 +1,7 @@
 # MCP 接入：把 vivado-as-code 变成 AI 可直接调用的工具
 
 本目录的 `vivado_as_code_server.py` 是一个**零依赖**（只用 Python 标准库）的
-MCP server，通过 stdio 提供 6 个工具：
+MCP server，通过 stdio 提供 8 个工具：
 
 | 工具 | 作用 | 会写文件？ | 典型耗时 |
 |---|---|---|---|
@@ -11,6 +11,8 @@ MCP server，通过 stdio 提供 6 个工具：
 | `vac_bd_export` | `write_bd_tcl` 回写 BD 真源 | ✅ 输出文件 | 1–2 min |
 | `vac_check_handoff` | BD ↔ `.hwh` ↔ `.bit` 一致性 | ❌ | 秒级 |
 | `vac_recipe_render` | 渲染参数化补丁（5 个 recipe） | ✅ 输出文件 | 秒级 |
+| `vac_ps7_render` | `ps7.yaml` → 带回读断言的 Tcl | ✅ 输出文件 | 秒级 |
+| `vac_bd_upgrade` | 跨 Vivado 版本升级 BD | ✅ 临时工程 + 输出文件 | 1–3 min |
 
 ## 通用：项目级 `.mcp.json`
 
