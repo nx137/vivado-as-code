@@ -89,6 +89,15 @@ class BdDiffTest(unittest.TestCase):
         )
         self.assertEqual(proc.returncode, 1)
 
+    def test_variable_style_module_ref(self) -> None:
+        """write_bd_tcl 的 $block_cell_name 形式也要能解析出真实实例名。"""
+        parsed = bd_diff.parse_bd(bd_diff.load(FIX / "bd_with_module_ref.tcl"))
+        self.assertIn("processing_system7_0", parsed["cells"])
+        self.assertIn("adc_3pa1030_sync_0", parsed["cells"])
+        self.assertEqual(parsed["cells"]["adc_3pa1030_sync_0"]["kind"], "module")
+        # 变量名本身不应该被当成实例
+        self.assertNotIn("$block_cell_name", parsed["cells"])
+
 
 if __name__ == "__main__":
     unittest.main()

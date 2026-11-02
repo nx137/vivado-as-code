@@ -82,7 +82,21 @@ if [ "$CODE" -eq 0 ] && command -v python3 >/dev/null 2>&1; then
     CHECKER="$(cd "$(dirname "$0")" && pwd)/check_build.py"
     if [ -f "$CHECKER" ]; then
         echo "--- 日志门禁 (check_build.py) ---"
-        python3 "$CHECKER" "$LOG" --manifest "$PROJECT_ROOT/outputs/build_manifest.json"
+        ALLOW_ARGS=()
+        if [ -n "${VAC_CHECK_ALLOW:-}" ]; then
+            IFS=';,' read -ra _pats <<< "$VAC_CHECK_ALLOW"
+            for _pat in "${_pats[@]}"; do
+                [ -n "$_pat" ] && ALLOW_ARGS+=(--allow "$_pat")
+            done
+        fi
+        if [ -f "$PROJECT_ROOT/.vac-lint-allow" ]; then
+            while IFS= read -r _line || [ -n "$_line" ]; do
+                _pat="$(printf '%s' "$_line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+                case "$_pat" in ''|'#'*) continue ;; esac
+                ALLOW_ARGS+=(--allow "$_pat")
+            done < "$PROJECT_ROOT/.vac-lint-allow"
+        fi
+        python3 "$CHECKER" "$LOG" --manifest "$PROJECT_ROOT/outputs/build_manifest.json" "${ALLOW_ARGS[@]}"
         LINT=$?
         if [ "$LINT" -ne 0 ]; then
             echo "[BUILD FAILED] 日志含 ERROR / CRITICAL WARNING（退出码 $LINT）"

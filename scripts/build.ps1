@@ -89,7 +89,25 @@ if (-not $SkipLint -and (Test-Path $log)) {
     $checker = Join-Path $PSScriptRoot 'check_build.py'
     if ((Test-Path $checker) -and (Get-Command python -ErrorAction SilentlyContinue)) {
         Write-Host "--- 日志门禁 (check_build.py) ---"
-        & python $checker $log --manifest (Join-Path $ProjectRoot 'outputs\build_manifest.json')
+        $pyArgs = @($checker, $log, '--manifest', (Join-Path $ProjectRoot 'outputs\build_manifest.json'))
+        # VAC_CHECK_ALLOW：项目级的"已知无害 CRITICAL"白名单（正则，分号/逗号分隔），
+        # 用于预留通道等确认无害的 tie-off。请在项目文档里写清为什么可以忽略。
+        if ($env:VAC_CHECK_ALLOW) {
+            foreach ($pat in ($env:VAC_CHECK_ALLOW -split '[;,]')) {
+                if ($pat.Trim()) { $pyArgs += @('--allow', $pat.Trim()) }
+            }
+        }
+        # 项目级白名单：<ProjectRoot>/.vac-lint-allow（每行一个正则，# 开头为注释）。
+        # 用于"确认无害、但无法在 BD 里消除"的警告；每条都应在项目文档里写清原因。
+        $allowFile = Join-Path $ProjectRoot '.vac-lint-allow'
+        if (Test-Path $allowFile) {
+            # 用 ReadAllLines：兼容 LF 文件（PS 5.1 的 Get-Content 对纯 LF 分行不可靠）
+            foreach ($line in [System.IO.File]::ReadAllLines($allowFile)) {
+                $pat = $line.Trim()
+                if ($pat -and -not $pat.StartsWith('#')) { $pyArgs += @('--allow', $pat) }
+            }
+        }
+        & python @pyArgs
         $lint = $LASTEXITCODE
         if ($lint -ne 0) {
             Write-Host "[BUILD FAILED] 构建日志含 ERROR / CRITICAL WARNING，退出码 $lint" -ForegroundColor Red

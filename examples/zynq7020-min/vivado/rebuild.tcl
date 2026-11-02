@@ -20,6 +20,8 @@
 #   VAC_PROJECT        工程目录名（默认 vivado_project）
 #   VAC_BD_TCL         BD 全量 TCL（默认 <root>/tcl/<bd_name>.tcl）
 #   VAC_BD_NAME        Block Design 名（默认 design_1）
+#   VAC_SRC_DIR        RTL 目录（默认 <root>/src；现有工程可指向 vivado/src）
+#   VAC_XDC_DIR        约束目录（默认 <root>/xdc；现有工程可指向 vivado/xdc）
 #   VAC_PATCH_TCL      可选增量补丁，逗号分隔，按顺序在 BD 之后执行
 #                      （相对路径按项目根目录解析，如 tcl/patch_add_gpio.tcl）
 #   VAC_POST_BD_TCL    可选，补丁之后再执行（属性覆盖等）
@@ -69,6 +71,9 @@ set proj_name     [env_or VAC_PROJECT     vivado_project]
 set bd_name       [env_or VAC_BD_NAME     design_1]
 set out_dir       [file join $root [env_or VAC_OUT_DIR outputs]]
 set copy_to       [env_or VAC_COPY_TO     ""]
+if {$copy_to ne "" && [file pathtype $copy_to] ne "absolute"} {
+    set copy_to [file normalize [file join $root $copy_to]]
+}
 set artifact_name [env_or VAC_ARTIFACT_NAME ""]
 set reuse         [env_or VAC_REUSE       0]
 set bd_tcl        [env_or VAC_BD_TCL      [file join $root tcl "${bd_name}.tcl"]]
@@ -137,7 +142,11 @@ if {[get_property PART [current_project]] ne $part} {
 # Phase 3: RTL 源文件
 # ---------------------------------------------------------------------------
 phase 3 $total "添加 RTL 源文件..."
-set src_dir [file join $root src]
+# 目录可覆盖：现有工程常把 RTL 放在 vivado/src（用 VAC_SRC_DIR 指向）
+set src_dir [env_or VAC_SRC_DIR ""]
+if {$src_dir eq ""} { set src_dir [file join $root src] }
+if {[file pathtype $src_dir] ne "absolute"} { set src_dir [file normalize [file join $root $src_dir]] }
+puts "  RTL 目录: $src_dir"
 set rtl_files {}
 foreach ext {*.v *.sv *.vh} {
     foreach f [glob -nocomplain [file join $src_dir $ext]] { lappend rtl_files $f }
@@ -153,7 +162,10 @@ if {[llength $rtl_files] == 0} {
 # Phase 4: 约束文件
 # ---------------------------------------------------------------------------
 phase 4 $total "添加约束文件..."
-set xdc_dir [file join $root xdc]
+set xdc_dir [env_or VAC_XDC_DIR ""]
+if {$xdc_dir eq ""} { set xdc_dir [file join $root xdc] }
+if {[file pathtype $xdc_dir] ne "absolute"} { set xdc_dir [file normalize [file join $root $xdc_dir]] }
+puts "  约束目录: $xdc_dir"
 set xdc_files [glob -nocomplain [file join $xdc_dir *.xdc]]
 if {[llength $xdc_files] == 0} {
     puts "  WARNING: xdc/ 下没有 .xdc 文件"

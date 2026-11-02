@@ -209,3 +209,96 @@ HINTS (with action):
 
 协议错误处理：未知工具 → `-32602`；未知方法 → `-32601`；非法 JSON → `-32700`；
 工具异常 → `isError: true`（不会让 server 崩溃）。
+---
+
+# 真实工程接入验证（2026-11-02）
+
+对象：真实参赛工程（Zynq-7020 + PYNQ），**不改动原工程任何文件**，
+只在工程里新增 2 个适配文件，用 `-RebuildScript` 切入工具链：
+
+- `vivado/rebuild_vac.tcl`：把 `vivado/src`、`vivado/xdc`、`vivado/tcl/*.tcl`、
+  PYNQ 覆盖目录映射成 `VAC_SRC_DIR` / `VAC_XDC_DIR` / `VAC_BD_TCL` / `VAC_PATCH_TCL` /
+  `VAC_POST_BD_TCL` / `VAC_COPY_TO` / `VAC_ARTIFACT_NAME`；
+- `vivado/tcl/post_bd_uart_aclk.tcl`：保留原脚本"source BD 后覆盖 UART ACLK"的行为。
+
+## V15 — 首次接入：日志门禁抓到 3 类问题
+
+```powershell
+scripts/build.ps1 -ProjectRoot . -RebuildScript vivado/rebuild_vac.tcl -StopAfter bd
+```
+
+Vivado 退出码 0（原流程 `build.bat` 从不检查 CRITICAL WARNING），门禁 FAIL：
+
+| # | 警告 | 真实含义 |
+|---|---|---|
+| 1 | `BD 41-759 /axi_mem_intercon/S02_ARESETN` | `NUM_SI=3`，但 `S02_AXI` 从未连接（历史残留） |
+| 2 | `BD 41-759 /xlconcat_0/In1` | 只建了网名 `axi_dma_0_s2mm_introut`，没接驱动 → S2MM 中断进不了 PS |
+| 3 | `BD 41-759 /mod_demod_mux_0/s_axis0/2_tvalid` | FM 补丁的 AM 预留通道，本就未使用 |
+
+第 1、2 条是**真 bug**（第 2 条解释了文档里"PYNQ DMA 中断不可用、改轮询"的现象），
+第 3 条显式接常量 0 即可。修复写成幂等补丁 `vivado/tcl/patch_fix_bd_issues.tcl`。
+
+## V16 — 修复后重建：0 ERROR / 0 CRITICAL
+
+```
+ERROR            : 0
+CRITICAL WARNING : 0
+ignored (allow)  : 3     # 均为补丁中间态，已在 .vac-lint-allow 注明原因
+RESULT: PASS
+```
+
+- BD 阶段耗时 **0.8 分钟**；
+- 最终设计：20 个 IP + 12 个 RTL module_ref；
+- "补丁之后不再出现 CRITICAL"已用日志行号验证（修复输出行 650+，CRITICAL 只在 291/347/627）。
+
+## V17 — BD 语义 diff（真实工程）
+
+```bash
+python scripts/bd_diff.py vivado/tcl/bd_design_1.tcl outputs/bd_final.tcl
+```
+
+```
+cells added (8):
+  + adc_dac_loopback_v2_0, axi_gpio_modem, axis_mux4_0,
+    fm_demodulator_0, fm_modulator_0, mod_demod_mux_0,
+    xlconstant_tie0, xlslice_modem_sel
+config changed:
+  ~ ps7_0_axi_periph.NUM_MI: 8 -> 9
+  ~ axi_mem_intercon.NUM_SI: 3 -> 2      # 本次修复
+address changed:
+  ~ axi_gpio_modem/S_AXI/Reg -> 0x41240000
+connections added: 12
+```
+
+结论：FM 补丁 + 本次修复的改动被完整、可读地呈现，无需人工读 700 行 TCL。
+
+## V18 — 产物一致性（BD ↔ .hwh）
+
+```bash
+python scripts/check_handoff.py --bd outputs/bd_final.tcl --hwh outputs/design_1_wrapper.hwh
+```
+
+```
+BD   : 20 IP cells, 12 RTL module_ref
+.hwh : 32 MODULE entries
+RESULT: PASS
+```
+
+> 接入时发现并修复了工具链的一个真实缺陷：`write_bd_tcl` 对 module_ref 生成的是
+> 变量形式（`set block_cell_name ...` + `create_bd_cell ... $block_cell_name`），
+> 原解析器把 `$block_cell_name]` 当成实例名，导致 `.hwh` 里 12 个 module_ref 被误判为
+> "多余模块"。已修复并补了回归测试（`bd_with_module_ref.tcl` fixture）。
+
+## V19 — 全量构建（-StopAfter impl）
+
+见下节实测数字（本机 Vivado 2020.2，12 并发）。
+
+## 接入过程对工具链的改进
+
+| 改进 | 来源 |
+|---|---|
+| `VAC_SRC_DIR` / `VAC_XDC_DIR` | 已有工程 RTL/XDC 不在根目录 |
+| `VAC_COPY_TO` 相对路径按项目根解析 | PYNQ 覆盖目录是相对路径 |
+| `VAC_CHECK_ALLOW` + 项目级 `.vac-lint-allow` | 补丁中间态噪声需要"可审计的白名单" |
+| module_ref 变量形式解析（bd_diff / check_handoff） | 真实 BD 用变量声明 module_ref |
+| MCP `vac_build` 支持 `rebuild_script` | 接入工程用自己的适配入口 |

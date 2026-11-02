@@ -75,6 +75,16 @@ class CheckHandoffTest(unittest.TestCase):
         )
         self.assertEqual(proc.returncode, 1)
 
+    def test_variable_style_module_ref(self) -> None:
+        """write_bd_tcl 用 $block_cell_name 声明 module_ref；它在 .hwh 里也是 MODULE，不能误判。"""
+        bd = (Path(__file__).parent / "fixtures" / "bd_with_module_ref.tcl").read_text(encoding="utf-8")
+        proc = self.run_check(
+            bd,
+            hwh_text(["processing_system7_0", "adc_3pa1030_sync_0"]),
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+        self.assertIn("adc_3pa1030_sync_0", proc.stdout)
+
 
 if __name__ == "__main__":
     unittest.main()

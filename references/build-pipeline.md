@@ -93,3 +93,49 @@ myproj/
 
 `.gitignore` 至少要包含：`vivado_project/`、`outputs/`、`*.jou`、`*.log`、`*.str`、
 `.Xil/`、`tcl/archive/`。
+
+## 7. 接入已有工程（不改原布局）
+
+已有工程通常是这样：`vivado/src`、`vivado/xdc`、`vivado/tcl/<bd>.tcl`，构建后还要把
+`.bit/.hwh` 改名复制到 PYNQ 目录。**不用搬家**，写一个适配器脚本把路径翻译成环境变量：
+
+```tcl
+# vivado/rebuild_vac.tcl
+set _here  [file normalize [info script]]
+set _root  [file dirname [file dirname $_here]]
+set env(VAC_ROOT)          $_root
+set env(VAC_SRC_DIR)       vivado/src
+set env(VAC_XDC_DIR)       vivado/xdc
+set env(VAC_BD_TCL)        vivado/tcl/bd_design_1.tcl
+set env(VAC_PATCH_TCL)     "vivado/tcl/bd_add_fm_modem.tcl,vivado/tcl/patch_fix_bd_issues.tcl"
+set env(VAC_POST_BD_TCL)   vivado/tcl/post_bd_uart_aclk.tcl
+set env(VAC_COPY_TO)       software/pynq/main
+set env(VAC_ARTIFACT_NAME) xinhao_uart_kb_adf4351_rf
+source [file join "D:/vivado-as-code" templates rebuild.tcl]
+```
+
+然后：
+
+```bash
+scripts/build.ps1 -ProjectRoot . -RebuildScript vivado/rebuild_vac.tcl -StopAfter bd
+```
+
+要点：
+- 原来的 `build.bat` / `rebuild.tcl` **保留不动**，两套入口并存；
+- 原来 `rebuild.tcl` 里"source BD 之后"的 `set_property` 收到 `VAC_POST_BD_TCL`；
+- 原来"复制并改名到 PYNQ 目录"的动作由 `VAC_COPY_TO` + `VAC_ARTIFACT_NAME` 完成；
+- 先跑 `-StopAfter bd`（分钟级），确认 BD 与补丁都正确，再跑全量。
+
+### 7.1 第一次接入通常会被门禁拦下
+
+原流程多半没检查过 CRITICAL WARNING。实测一个真实竞赛工程，第一次接入就抓到 3 类问题：
+一个从未连接的多余 AXI 主口（`NUM_SI=3` 但 `S02_AXI` 空）、一个只建了网名却没接驱动的中断
+（`axi_dma_0/s2mm_introut` 没接进 `xlconcat`）、以及一组预留通道的未连接 `tvalid`。
+前两个是真 bug，第三个显式接常量 0 即可。
+
+处理原则：
+1. **能修的在 BD 里修**（写成幂等补丁，挂到 `VAC_PATCH_TCL`）；
+2. 只有"确认无害且无法消除"的才进白名单 `<root>/.vac-lint-allow`，并写明原因；
+3. 修完必须验证"补丁之后不再出现该 CRITICAL"（`grep` 日志的行号顺序即可判断）。
+
+完整可抄的适配文件见 `examples/real-project-adoption/`。

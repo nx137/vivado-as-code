@@ -1,0 +1,12 @@
+feat: 支持接入已有工程（不改原布局）+ 真实验证发现的修复
+
+- templates/rebuild.tcl: 新增 VAC_SRC_DIR / VAC_XDC_DIR（RTL/XDC 不在根目录时）；
+  VAC_COPY_TO 相对路径按项目根解析
+- build.ps1 / build.sh: 新增 VAC_CHECK_ALLOW 与项目级 <root>/.vac-lint-allow 白名单
+  （只允许确认无害且无法消除的警告，必须写明原因）
+- mcp: vac_build 新增 rebuild_script 参数（接入工程用自己的适配入口）
+- check_handoff/bd_diff: 修复 write_bd_tcl 变量形式 module_ref 的解析
+  （原来把 $block_cell_name 当实例名，导致 .hwh 里 12 个 module_ref 被误判为多余）
+- tests: +2 个用例（变量形式 module_ref），共 49 个
+- examples/real-project-adoption/: 真实工程接入的适配文件与实测记录
+- docs/verification.md: V15–V19 真实工程接入验证

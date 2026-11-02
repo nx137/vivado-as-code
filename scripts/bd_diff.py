@@ -40,6 +40,12 @@ ADDR_RE = re.compile(
 )
 NET_RE = re.compile(r"connect_bd_intf_net\s+(.*?)(?=\n|$)")
 PIN_RE = re.compile(r"get_bd_(?:intf_)?pins\s+([^\]]+)\]")
+# write_bd_tcl 对 module_ref 生成的变量形式：
+#   set block_cell_name <name>
+#   if { [catch {set ... [create_bd_cell -type module -reference $block_name $block_cell_name] } ...
+MOD_VAR_RE = re.compile(
+    r"set\s+block_cell_name\s+(\S+)\s*\n\s*if\s*\{\s*\[catch\s*\{\s*set", re.S
+)
 
 
 def _clean(name: str) -> str:
@@ -57,7 +63,14 @@ def parse_bd(text: str) -> dict:
     for vlnv, name in CELL_IP_RE.findall(text):
         cells[_clean(name)] = {"kind": "ip", "vlnv": vlnv}
     for ref, name in CELL_MOD_RE.findall(text):
-        cells[_clean(name)] = {"kind": "module", "vlnv": ref}
+        name = _clean(name)
+        # write_bd_tcl 对 module_ref 可能写变量名（$block_name/$block_cell_name），跳过
+        if "$" in name or "]" in name or "[" in name or name == "":
+            continue
+        cells[name] = {"kind": "module", "vlnv": ref}
+    # 变量形式的 module_ref：set block_cell_name <name> + create_bd_cell ... $block_cell_name
+    for name in MOD_VAR_RE.findall(text):
+        cells[name] = {"kind": "module", "vlnv": "(module_ref)"}
 
     configs: dict[str, dict[str, str]] = {}
     for block, cell in CONFIG_BLOCK_RE.findall(text):

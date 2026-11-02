@@ -85,6 +85,7 @@ scripts/build.ps1 -ProjectRoot myproj                    # 全量出 bit
 | 构建失败 / 时序不过 / 硬件不工作 | `python scripts/check_build.py build.log --explain`，再按"症状 → 根因 → 检查命令"查表 | `references/pitfalls.md` |
 | 加/改 RTL 模块 | 放 `src/`，BD 里 `create_bd_cell -type module -reference` | `references/bd-patterns.md` |
 | 从 GUI 改完 BD 回写真源 | `scripts/bd_export.tcl`（自动存档旧版本） | `references/bd-patterns.md` |
+| 接入已有工程（不改原布局） | 写 `vivado/rebuild_vac.tcl` 适配器设置 `VAC_SRC_DIR`/`VAC_XDC_DIR`/`VAC_PATCH_TCL` 等，`-RebuildScript` 指向它 | `examples/real-project-adoption/` + `references/build-pipeline.md` §7 |
 | 构建失败 / 时序不过 / 硬件不工作 | 按"症状 → 根因 → 检查命令"查表 | `references/pitfalls.md` |
 | bit 交给 PYNQ 板子 | 同名 `.bit/.hwh` + FS 常量校准 | `references/pynq-handoff.md` |
 
@@ -110,6 +111,8 @@ scripts/build.ps1 -ProjectRoot myproj                    # 全量出 bit
 | `VAC_PART` | `xc7z020clg400-2` | 器件 |
 | `VAC_TOP` | `design_1_wrapper` | 顶层 module |
 | `VAC_STOP_AFTER` | `impl` | `bd` / `synth` / `impl` |
+| `VAC_SRC_DIR` | `<root>/src` | RTL 目录；已有工程常写成 `vivado/src` |
+| `VAC_XDC_DIR` | `<root>/xdc` | 约束目录；已有工程常写成 `vivado/xdc` |
 | `VAC_BD_TCL` | `<root>/tcl/<bd>.tcl` | BD 真源 |
 | `VAC_PATCH_TCL` | 空 | 逗号分隔的补丁脚本，按顺序执行；**相对路径按项目根目录解析**（如 `tcl/patch_add_gpio.tcl`） |
 | `VAC_POST_BD_TCL` | 空 | 补丁之后的属性覆盖（如改 PS 时钟），相对路径同样按项目根解析 |
@@ -117,6 +120,7 @@ scripts/build.ps1 -ProjectRoot myproj                    # 全量出 bit
 | `VAC_COPY_TO` / `VAC_ARTIFACT_NAME` | 空 | 把产物复制到部署目录并可改名 |
 | `VAC_JOBS` | `8` | 并行任务数 |
 | `VAC_REUSE` | `0` | 1 = 复用已有工程（默认每次干净重建） |
+| `VAC_CHECK_ALLOW` | 空 | 日志白名单正则（`;`/`,` 分隔）；工程级白名单见 `<root>/.vac-lint-allow` |
 
 ## 最小可跑示例
 

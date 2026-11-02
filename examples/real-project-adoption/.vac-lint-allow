@@ -1,0 +1,14 @@
+# .vac-lint-allow -- project-level allowlist for check_build.py
+#
+# One regex per line (passed to --allow); lines starting with # are comments.
+# Rule: fix it if you can; only allowlist what cannot be fixed, and document why.
+#
+# 1) BD 41-759: the legacy patch vivado/tcl/bd_add_fm_modem.tcl saves the BD
+#    before the reserved mod_demod_mux AM channels are tied off, so it logs a
+#    transient warning. vivado/tcl/patch_fix_bd_issues.tcl fixes it afterwards
+#    and the final validate_bd_design passes (no 41-759 after the fix patch).
+BD 41-759
+#
+# 2) IP_Flow 19-4751: da_driver_0/da_clk is a module_ref output clock without
+#    FREQ_HZ; the fix patch sets it, but older Vivado builds may still warn.
+IP_Flow 19-4751

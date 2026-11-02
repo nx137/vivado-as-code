@@ -108,6 +108,7 @@ def tool_vac_build(args: dict) -> dict:
     jobs = int(args.get("jobs", 8))
     patch_files = args.get("patch_files") or []
     export_bd = str(args.get("export_bd", "") or "")
+    rebuild_script = str(args.get("rebuild_script", "") or "")
     timeout = int(args.get("timeout_sec", 3600))
 
     env = dict(os.environ)
@@ -124,6 +125,8 @@ def tool_vac_build(args: dict) -> dict:
                "-ProjectRoot", project_root, "-StopAfter", stop_after, "-Jobs", str(jobs)]
     else:
         cmd = ["bash", str(build_sh), "-p", project_root, "-s", stop_after, "--jobs", str(jobs)]
+    if rebuild_script:
+        cmd += ["-RebuildScript", rebuild_script] if os.name == "nt" else ["--rebuild", rebuild_script]
 
     proc = subprocess.run(cmd, env=env, capture_output=True, text=True,
                           encoding="utf-8", errors="replace", timeout=timeout)
@@ -268,6 +271,8 @@ TOOLS = [
                 "patch_files": {"type": "array", "items": {"type": "string"},
                                 "description": "BD 增量补丁路径（相对项目根或绝对）"},
                 "export_bd": {"type": "string", "description": "导出打补丁后的 BD 到 outputs/<name>"},
+                "rebuild_script": {"type": "string",
+                                   "description": "自定义构建入口（如工程自带的 vivado/rebuild_vac.tcl）；默认 <root>/vivado/rebuild.tcl"},
                 "timeout_sec": {"type": "integer", "default": 3600},
             },
             "required": ["project_root"],
