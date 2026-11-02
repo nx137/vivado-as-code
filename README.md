@@ -2,10 +2,16 @@
 
 > 把 Xilinx Vivado 工程变成"**工程即代码**"：不提交 `.xpr`，一条命令从零重建 bitstream，
 > Block Design 和 Zynq PS 配置全部落在可 diff、可 review 的 TCL 文本里。
-> 同时打包成一个 **AI Agent 技能（Skill）**，让 Claude Code / DeepSeek Harness 等助手
-> 能按同一套方法论帮你改 PS 时钟、加 AXI 外设、定位构建问题。
+> 同时提供 **AI Agent 技能 + MCP 工具层**，让 Claude Code / DeepSeek Harness 能直接
+> 调构建、查日志、做 BD 语义 diff、渲染参数化补丁。
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/nx137/vivado-as-code/actions/workflows/ci.yml/badge.svg)](https://github.com/nx137/vivado-as-code/actions/workflows/ci.yml)
+
+**English summary** — Vivado as code: one-command full-TCL rebuild of a Xilinx project
+(no `.xpr` in VCS), Block Design and Zynq PS7 configuration kept as reviewable Tcl,
+idempotent BD patches, semantic BD diff, log gate with fix hints, plus a zero-dependency
+MCP server and an AI-agent skill. MIT.
 
 ---
 
@@ -14,41 +20,66 @@
 | 传统做法 | 本方案 |
 |---|---|
 | 提交 `.xpr/.runs/.gen`，二进制不可 review | 只提交 `src/` + `xdc/` + `tcl/<bd>.tcl` + 构建脚本 |
-| BD 改了哪里没人知道 | `write_bd_tcl` 导出文本，`git diff` 看得见 |
+| BD 改了哪里没人知道 | `write_bd_tcl` 导出文本，`git diff` / `bd_diff.py` 看得见 |
 | 换台机器/队友 clone 后编不出来 | 一条命令全量重建 |
 | PS 时钟/HP 口/中断配置只在 GUI 状态里 | 全部是 `CONFIG.PCW_*` 属性，脚本可配 |
-| 参数名写错照样出 bit，硬件是错的 | 日志门禁：0 条 `CRITICAL WARNING` 才算过 |
+| 参数名写错照样出 bit，硬件是错的 | 日志门禁：0 条 `CRITICAL WARNING` 才算过，并给出修复建议 |
+| AI 助手每次都要读文档拼命令 | MCP 工具层 + SKILL.md，工具带参数校验与结构化返回 |
 
-## 2. 本机实测结果（Vivado 2020.2 / xc7z020clg400-2）
+## 2. v0.2 新增
+
+| 能力 | 用法 | 说明 |
+|---|---|---|
+| **MCP server** | `python mcp/vivado_as_code_server.py` | 6 个工具：`vac_build` / `vac_check_log` / `vac_bd_diff` / `vac_bd_export` / `vac_check_handoff` / `vac_recipe_render`；`.mcp.json` 一份配置同时适用 Claude Code 与 DSH |
+| **参数化补丁 recipes** | `python scripts/recipe.py render add_axi_gpio -p name=xxx --out tcl/patch.tcl` | 5 个：`add_axi_gpio` / `add_axi_uartlite` / `add_axi_dma_hp` / `set_fclk` / `open_irq_f2p`，自带幂等与属性回读 |
+| **BD 语义 diff** | `python scripts/bd_diff.py old.tcl new.tcl --json` | 新增/删除 cell、CONFIG 变更、地址变更、连线变更；`--fail-on-change` 可做 CI 门禁 |
+| **日志诊断** | `python scripts/check_build.py build.log --explain` | 已知错误模式（BD 41-759/758/701、版本锁、Vivado 环境）→ 修复动作 + pitfalls 章节 |
+| **测试与 CI** | `python -m unittest discover -s tests -t . -v` | 47 个用例，GitHub Actions 双平台 × Python 3.9/3.12，不需要 Vivado |
+
+## 3. 实测（Vivado 2020.2 / xc7z020clg400-2）
 
 | 验证 | 结果 |
 |---|---|
-| 从 BD TCL 全量重建 BD + `.hwh` | ✅ 约 **0.5 分钟**，0 ERROR / 0 CRITICAL |
-| 增量补丁幂等性（连跑 2 次 vs 1 次） | ✅ 导出的 BD TCL **哈希完全一致** |
-| 全量综合 + 实现 + 生成 bit | ✅ 约 **4.8 分钟**，`design_1_wrapper.bit` 3.95 MB，**WNS +1.932 ns** |
-| PS 时钟菜谱（FCLK0 100→150 MHz） | ✅ 回读 `ACT_FPGA0=150.000000`，分频自动变 4/3 |
-| 日志门禁负例（注入 CRITICAL） | ✅ 退出码 2，正确拦截 |
-| 产物一致性检查 | ✅ BD/`.hwh`/`.bit` 一致 |
-| 新助手仅凭文档完成任务（V6） | ✅ 加 AXI GPIO 并重建 BD，0 CRITICAL，幂等 |
+| 从 BD TCL 重建 BD + `.hwh` | ✅ 约 **0.5 分钟**，0 ERROR / 0 CRITICAL |
+| 增量补丁幂等性（同轮双跑） | ✅ 导出 BD **哈希完全一致** |
+| 全量综合 + 实现 + 生成 bit | ✅ 约 **4.8 分钟**，`.bit` 3.95 MB，**WNS +1.932 ns** |
+| PS 时钟菜谱（FCLK0 100→150 MHz） | ✅ 回读 `ACT=150.000000`，分频自动 4/3 |
+| recipe 渲染 → 构建 | ✅ `add_axi_gpio` 参数化补丁 0 CRITICAL、幂等 |
+| BD 语义 diff | ✅ 精确报出新增 cell、`NUM_MI 1→2`、新增地址 `0x41240000` |
+| 日志诊断（注入 41-759） | ✅ 给出修复动作并指向 `pitfalls.md` B3 |
+| MCP 端到端 | ✅ 6 工具可列；`vac_build`/`vac_bd_diff`/`vac_check_handoff`/`vac_recipe_render` 返回结构化结果 |
+| 干净 clone 端到端 | ✅ 退出码 0，`RESULT: PASS` |
+| 新助手仅凭文档完成任务 | ✅ 加 AXI GPIO + 重建 BD，0 CRITICAL |
 
-> 完整记录见 [`docs/verification.md`](docs/verification.md)（含命令与原始输出摘要）；
-> 可用性测试的发现与修复见 [`docs/usability.md`](docs/usability.md)。
+> 详细记录：[`docs/verification.md`](docs/verification.md)；可用性测试与修复：[`docs/usability.md`](docs/usability.md)。
 
-## 3. 快速开始
+## 4. 快速开始
 
-### 3.1 作为技能安装（给 AI 助手用）
+### 4.1 作为技能安装（给 AI 助手用）
 
 ```bash
-# Claude Code
-git clone https://github.com/nx137/vivado-as-code ~/.claude/skills/vivado-as-code
-# DeepSeek Harness
-git clone https://github.com/nx137/vivado-as-code ~/.dsh/skills/vivado-as-code
+git clone https://github.com/nx137/vivado-as-code ~/.claude/skills/vivado-as-code   # Claude Code
+git clone https://github.com/nx137/vivado-as-code ~/.dsh/skills/vivado-as-code      # DeepSeek Harness
 ```
 
-装好后对助手说"用 vivado-as-code 把 FCLK0 改成 150MHz 并重建"即可，
-助手会读 `SKILL.md`，按需加载 `references/` 里的细则。
+### 4.2 作为 MCP 工具挂载（推荐，AI 可直接调）
 
-### 3.2 直接当模板用（不需要 AI）
+在工程根目录放 `.mcp.json`（Claude Code 与 DSH 通用，DSH 也认 `.dsh/mcp.json`）：
+
+```json
+{
+  "mcpServers": {
+    "vivado-as-code": {
+      "command": "python",
+      "args": ["D:/vivado-as-code/mcp/vivado_as_code_server.py"]
+    }
+  }
+}
+```
+
+详见 [`mcp/README.md`](mcp/README.md)。
+
+### 4.3 直接当模板用（不需要 AI）
 
 ```bash
 mkdir -p myproj/vivado
@@ -65,9 +96,7 @@ vivado -mode batch -source scripts/bd_export.tcl -tclargs \
 ./scripts/build.ps1 -ProjectRoot myproj                  # 全量出 bit
 ```
 
-Linux/macOS：`scripts/build.sh -p myproj -s bd`。
-
-### 3.3 跑最小示例
+### 4.4 跑最小示例
 
 ```bash
 cd examples/zynq7020-min
@@ -75,14 +104,14 @@ vivado -mode batch -source tcl/mk_min_bd.tcl     # 生成 tcl/design_1.tcl（只
 ../../scripts/build.ps1 -ProjectRoot . -StopAfter bd
 ```
 
-## 4. 仓库结构
+## 5. 仓库结构
 
 ```
 .
-├── SKILL.md                 # 技能入口：铁律、决策树、脚本表、按需加载 references
+├── SKILL.md                 # 技能入口：铁律、决策树、工具表、按需加载 references
 ├── references/
 │   ├── ps7-config.md        # PS7 配置配方（时钟/HP/IRQ/MIO/DDR）+ 验证
-│   ├── bd-patterns.md       # BD 即 TCL：回写、幂等补丁、扩互连、地址
+│   ├── bd-patterns.md       # BD 即 TCL：回写、幂等补丁、地址、bd_diff、recipe
 │   ├── build-pipeline.md    # 九阶段、分级验证、日志门禁、目录约定
 │   ├── pitfalls.md          # 症状→根因→检查命令（20+ 条）
 │   └── pynq-handoff.md      # .bit/.hwh、Overlay、FS 校准、一致性检查
@@ -91,35 +120,44 @@ vivado -mode batch -source tcl/mk_min_bd.tcl     # 生成 tcl/design_1.tcl（只
 │   ├── bd_export.tcl        # write_bd_tcl 回写 + 自动存档
 │   ├── bd_patch_template.tcl# 幂等增量补丁模板（可跑通、可重复）
 │   ├── lib/guards.tcl       # 幂等守卫库
-│   ├── check_build.py       # 日志门禁（ERROR/CRITICAL/WNS）
+│   ├── recipe.py            # 参数化补丁渲染器
+│   ├── recipes/             # 5 个补丁模板
+│   ├── bd_diff.py           # BD 语义 diff
+│   ├── check_build.py       # 日志门禁 + --explain 诊断
 │   └── check_handoff.py     # BD ↔ .hwh ↔ .bit 一致性
+├── mcp/
+│   ├── vivado_as_code_server.py  # 零依赖 stdio MCP server
+│   └── README.md            # Claude Code / DSH 接入
 ├── templates/
 │   ├── rebuild.tcl          # 参数化九阶段构建
 │   └── project-skeleton/    # 空工程骨架
-└── examples/zynq7020-min/   # 可跑通的最小示例（PS7 + DMA 自环，零引脚约束）
+├── examples/zynq7020-min/   # 可跑通的最小示例（PS7 + DMA 自环，零引脚约束）
+├── tests/                   # 47 个单元/协议测试（不需要 Vivado）
+├── .github/workflows/ci.yml # 双平台 × Python 3.9/3.12
+└── docs/                    # 验证记录、可用性测试、自托管 CI 模板
 ```
 
-## 5. 核心约定（不遵守就会复现老问题）
+## 6. 核心约定（不遵守就会复现老问题）
 
 1. 不提交 `.xpr/.runs/.gen`；BD 真源是 `tcl/<bd>.tcl`。
-2. GUI 改完 BD → `bd_export.tcl` 回写 → 全量重建验证 → commit。
+2. GUI 改完 BD → `bd_export.tcl` 回写 → `bd_diff.py` 确认改动 → 全量重建验证 → commit。
 3. 每次验证都**干净重建**，不依赖增量缓存。
 4. 构建后必须过日志门禁（`check_build.py`），CRITICAL 数量必须为 0。
-5. `.bit` / `.hwh` 同名同目录，且来自同一次构建。
+5. `.bit` / `.hwh` 同名同目录，且来自同一次构建；交付前用 `check_handoff.py`。
 
-## 6. 适用边界
+## 7. 适用边界
 
 - **优先 Zynq-7000（PS7）**；纯 7 系列 PL 工程同样适用；
   UltraScale+ MPSoC 需要把 PS 配置段换成 `zynq_ultra_ps_e` 的 `CONFIG.PSU__*`。
 - 不处理 Vivado 安装/许可（示例用 WebPACK 覆盖的 xc7z020）。
 - 不含任何特定开发板的引脚定义——板级 XDC 由使用者提供。
-- 版本：BD TCL 带 Vivado 版本校验，跨版本升级方法见 `references/pitfalls.md` A4。
+- 版本：BD TCL 带 Vivado 版本校验（2020.2），跨版本升级方法见 `references/pitfalls.md` A4。
 
-## 7. 出处与许可
+## 8. 出处与许可
 
 这套方法来自 2026 年江苏省大学生电子设计竞赛（TI 杯）G 题参赛工程
 （南京理工大学 NJ505 队，Zynq-7020 + PYNQ）。原工程把全部构建流程收敛到
 `rebuild.tcl` + `bd_design_1.tcl`，本仓库是其中**可复用部分**的抽象与加固：
-去掉板级/赛题专属内容，补上幂等守卫、日志门禁、一致性检查与最小示例。
+去掉板级/赛题专属内容，补上幂等守卫、日志门禁、语义 diff、MCP 工具层与测试。
 
 代码与脚本：[MIT](LICENSE)。

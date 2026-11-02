@@ -4,10 +4,12 @@ description: >
   用全量 TCL 脚本驱动 Xilinx Vivado，把 Zynq/FPGA 工程做成"工程即代码"：
   不提交 .xpr，用 rebuild.tcl 一键全量重建，用 write_bd_tcl 把 Block Design
   固化成文本真源，通过 CONFIG.PCW_* 在 Tcl 里配置 Zynq PS7（时钟/PLL、HP 口、
-  IRQ、MIO 外设、DDR），并用幂等补丁脚本演进设计。适用于：Vivado 全量 TCL /
-  BD 脚本化 / PS7 配置 / 无 .xpr 工程 / 复现 bitstream / 迁移板卡 /
-  PYNQ overlay 交付。当用户提到 "Vivado 全量脚本"、"Block Design 用 Tcl 建"、
-  "PS 端配置"、"write_bd_tcl"、"clone 就能重建" 时使用。
+  IRQ、MIO 外设、DDR），并用幂等补丁脚本演进设计。
+  Use for Vivado full-Tcl flow, Block Design as code, Zynq PS7 configuration,
+  write_bd_tcl round-trip, reproducible bitstream without .xpr, PYNQ overlay
+  handoff, BD semantic diff, and idempotent BD patches.
+  当用户提到 "Vivado 全量脚本"、"Block Design 用 Tcl 建"、"PS 端配置"、
+  "write_bd_tcl"、"clone 就能重建"、"BD diff" 时使用。
 license: MIT
 ---
 
@@ -31,6 +33,22 @@ license: MIT
 4. **构建成功 ≠ 正确**：Vivado 里 IP 参数名写错只报 `CRITICAL WARNING`，照样出 bit。
    必须跑 `scripts/check_build.py`（0 条 CRITICAL 才算过）。
 5. **产物必须成对且同名**：`.bit` + `.hwh` 同名同目录，否则 PYNQ `Overlay()` 解析不出 `ip_dict`。
+
+## 如果宿主已挂载本仓库的 MCP（优先用工具）
+
+`mcp/vivado_as_code_server.py` 提供 6 个工具，比手拼命令更可靠（参数校验、结构化返回）：
+
+| 工具 | 什么时候用 |
+|---|---|
+| `vac_build` | 跑构建；先 `stop_after=bd` 验证 BD，再 `impl` 出 bit |
+| `vac_check_log` | 构建后看 ERROR/CRITICAL/WNS + 已知问题建议 |
+| `vac_bd_diff` | 改完 BD 看语义差异（新增 cell / CONFIG / 地址） |
+| `vac_bd_export` | GUI 改完回写真源 |
+| `vac_check_handoff` | 交付 PYNQ 前检查 `.bit/.hwh` 一致性 |
+| `vac_recipe_render` | 生成参数化补丁（GPIO/UART/DMA/时钟/中断） |
+
+接入方式见 `mcp/README.md`（`.mcp.json` 一份配置同时适用 Claude Code 与 DSH）。
+没有 MCP 时，按下文用 CLI 完成同样的操作。
 
 ## 快速上手（3 步）
 
@@ -62,7 +80,9 @@ scripts/build.ps1 -ProjectRoot myproj                    # 全量出 bit
 | 改 PS 时钟 / PLL / 分频 | `set_property CONFIG.PCW_FPGA0_PERIPHERAL_FREQMHZ {150} [get_bd_cells processing_system7_0]`，回读 `PCW_ACT_*` 验证 | `references/ps7-config.md` |
 | 新开 DDR 高速口 / 加第二个 DMA | `CONFIG.PCW_USE_S_AXI_HP1 {1}` + 独立 interconnect | `references/ps7-config.md` |
 | 打开 PL→PS 中断 | `PCW_USE_FABRIC_INTERRUPT=1`、`PCW_IRQ_F2P_INTR=1` + `axi_intc` | `references/ps7-config.md` |
-| 加一个外设 IP（GPIO/UART/DMA…） | 写幂等补丁脚本，挂到 `VAC_PATCH_TCL`；补丁复制进工程时把 `scripts/lib/guards.tcl` 放到 `scripts/lib/` 或 `tcl/lib/` | `references/bd-patterns.md` + `scripts/bd_patch_template.tcl` |
+| 加一个外设 IP（GPIO/UART/DMA…） | 优先用参数化 recipe：`python scripts/recipe.py render add_axi_gpio -p name=xxx --out tcl/patch_gpio.tcl`；复杂改动再写幂等补丁，挂到 `VAC_PATCH_TCL` | `scripts/recipes/` + `references/bd-patterns.md` |
+| 看 BD 到底改了什么 | `python scripts/bd_diff.py a.tcl b.tcl`（加 `--json` / `--fail-on-change`） | `references/bd-patterns.md` §6 |
+| 构建失败 / 时序不过 / 硬件不工作 | `python scripts/check_build.py build.log --explain`，再按"症状 → 根因 → 检查命令"查表 | `references/pitfalls.md` |
 | 加/改 RTL 模块 | 放 `src/`，BD 里 `create_bd_cell -type module -reference` | `references/bd-patterns.md` |
 | 从 GUI 改完 BD 回写真源 | `scripts/bd_export.tcl`（自动存档旧版本） | `references/bd-patterns.md` |
 | 构建失败 / 时序不过 / 硬件不工作 | 按"症状 → 根因 → 检查命令"查表 | `references/pitfalls.md` |
@@ -77,8 +97,11 @@ scripts/build.ps1 -ProjectRoot myproj                    # 全量出 bit
 | `scripts/bd_export.tcl` | `write_bd_tcl -force` 回写 BD + 带时间戳存档 |
 | `scripts/lib/guards.tcl` | 幂等守卫：`vac_ensure_ip` / `vac_connect_net_if_free` / `vac_ensure_addr` / `vac_verify_prop` |
 | `scripts/bd_patch_template.tcl` | 增量补丁模板（加 AXI GPIO 的完整示例，连跑两次结果一致） |
-| `scripts/check_build.py` | 日志门禁：ERROR / CRITICAL WARNING / WNS，退出码驱动 CI |
+| `scripts/recipe.py` + `scripts/recipes/` | 参数化补丁渲染：`add_axi_gpio` / `add_axi_uartlite` / `add_axi_dma_hp` / `set_fclk` / `open_irq_f2p` |
+| `scripts/bd_diff.py` | BD 语义 diff（cell / CONFIG / 地址 / 连线），`--json`、`--fail-on-change` |
+| `scripts/check_build.py` | 日志门禁：ERROR / CRITICAL WARNING / WNS + `--explain` 修复建议 |
 | `scripts/check_handoff.py` | BD ↔ `.hwh` ↔ `.bit` 一致性（防产物过期/不同名） |
+| `mcp/vivado_as_code_server.py` | MCP server（零依赖 stdio），把上面这些暴露成 AI 工具 |
 
 ## 环境变量（rebuild.tcl）
 

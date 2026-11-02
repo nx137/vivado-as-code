@@ -1,0 +1,53 @@
+# @desc 添加 AXI UART Lite，挂到 PS AXI-Lite；可选把 UART 引脚提为顶层端口
+# @param name=axi_uartlite_0 实例名
+# @param baud=115200 波特率
+# @param addr=0x42C00000 AXI-Lite 基地址
+# @param aclk_freq=0 板上实际 AXI 时钟（Hz）；>0 时写入 C_S_AXI_ACLK_FREQ_HZ（重要！）
+# @param make_external=0 1=把 UART 接口提为顶层端口（需要板级 XDC 约束）
+
+set uart [vac_ensure_ip xilinx.com:ip:axi_uartlite:2.0 @@name@@ {
+    CONFIG.C_BAUDRATE {@@baud@@}
+}]
+
+# 波特率分频按这个频率算。BD 里的 FCLK 常与板上实际不符（FSBL 决定），
+# 换板/换镜像后按实测值填，否则会出现"115200 实际只有 ~64k"的乱码。
+if {@@aclk_freq@@ > 0} {
+    set_property CONFIG.C_S_AXI_ACLK_FREQ_HZ {@@aclk_freq@@} $uart
+    puts "  \[recipe\] @@name@@ C_S_AXI_ACLK_FREQ_HZ = @@aclk_freq@@"
+}
+
+vac_require_cell processing_system7_0
+vac_connect_net_if_free [list processing_system7_0/FCLK_CLK0 @@name@@/s_axi_aclk]
+if {[llength [get_bd_pins -quiet rst_ps7_0_100M/peripheral_aresetn]] > 0} {
+    vac_connect_net_if_free [list rst_ps7_0_100M/peripheral_aresetn @@name@@/s_axi_aresetn]
+}
+
+set _target [get_bd_intf_pins -quiet @@name@@/S_AXI]
+if {[llength $_target] == 0} { fail "@@name@@ 没有 S_AXI 接口" }
+set _already [expr {[llength [get_bd_intf_nets -quiet -of_objects $_target]] > 0}]
+
+if {$_already} {
+    puts "  \[recipe\] @@name@@/S_AXI 已连接，跳过扩互连与分地址"
+} else {
+    set mi_cur [get_property CONFIG.NUM_MI [get_bd_cells ps7_0_axi_periph]]
+    set mi_new [expr {$mi_cur + 1}]
+    set_property CONFIG.NUM_MI $mi_new [get_bd_cells ps7_0_axi_periph]
+    set mi_idx [format "M%02d" [expr {$mi_new - 1}]]
+    puts "  \[recipe\] ps7_0_axi_periph NUM_MI: $mi_cur -> $mi_new"
+    vac_connect_net_if_free [list processing_system7_0/FCLK_CLK0 ps7_0_axi_periph/${mi_idx}_ACLK]
+    if {[llength [get_bd_pins -quiet rst_ps7_0_100M/peripheral_aresetn]] > 0} {
+        vac_connect_net_if_free [list rst_ps7_0_100M/peripheral_aresetn ps7_0_axi_periph/${mi_idx}_ARESETN]
+    }
+    vac_connect_if_free [list ps7_0_axi_periph/${mi_idx}_AXI @@name@@/S_AXI]
+    vac_ensure_addr @@addr@@ 0x10000 processing_system7_0/Data @@name@@/S_AXI/Reg
+}
+
+# 可选：把 UART 提到顶层（TX/RX 引脚需要在 xdc/ 里约束，否则实现阶段会报未约束端口）
+if {@@make_external@@} {
+    if {[llength [get_bd_intf_ports -quiet UART_0]] == 0} {
+        make_bd_intf_pins_external [get_bd_intf_pins @@name@@/UART]
+        puts "  \[recipe\] 已把 @@name@@/UART 提为顶层端口（记得补 XDC）"
+    }
+}
+
+vac_verify_prop @@name@@ CONFIG.C_BAUDRATE {@@baud@@}

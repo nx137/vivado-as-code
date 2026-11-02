@@ -1,0 +1,32 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / py${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.9", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Byte-compile (syntax check)
+        run: python -m compileall -q scripts mcp tests
+
+      - name: Unit tests (no Vivado required)
+        run: python -m unittest discover -s tests -t . -v
+
+      - name: MCP self-test
+        run: python mcp/vivado_as_code_server.py --self-test

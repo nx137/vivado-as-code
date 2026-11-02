@@ -23,8 +23,8 @@ VAC_EXPORT_BD=bd_exported.tcl scripts/build.ps1 -ProjectRoot . -StopAfter bd
 
 | 运行 | 补丁执行次数 | 导出 BD |
 |---|---|---|
-| A | 1 次 | 16,304 bytes |
-| B | 2 次（第二次走"已连接，跳过"分支） | 16,304 bytes |
+| A | 1 次 | 16,337 bytes |
+| B | 2 次（第二次走"已连接，跳过"分支） | 16,337 bytes |
 
 结果：✅ 两次导出的 `bd_exported.tcl` **SHA256 完全一致**（幂等成立）。
 
@@ -127,3 +127,85 @@ scripts/build.ps1 -ProjectRoot examples/zynq7020-min -StopAfter bd
 
 结果：✅ 退出码 0，`RESULT: PASS`，生成 `design_1_wrapper.hwh` 与 `build_manifest.json`。
 即"clone 即可重建"成立（本机 Vivado 自动探测到 `E:\Xilinx\Vivado\2020.2`）。
+
+---
+
+# v0.2 验证（2026-11-02）
+
+## V9 — 单元测试
+
+```bash
+python -m unittest discover -s tests -t . -v
+```
+
+结果：✅ **47 个用例全部通过**（约 2.5 秒，不需要 Vivado）。
+覆盖：`check_build`（计数/白名单/时序/诊断）、`check_handoff`（正负例/同名）、
+`bd_diff`（解析/差异/CLI 退出码）、`recipes`（5 个模板渲染/参数覆盖/文件保护）、
+`templates_sync`（模板与示例副本一致、技能 frontmatter、BOM）、
+`mcp_protocol`（initialize/tools/list/tools/call/错误码）。
+
+## V10 — CI
+
+`.github/workflows/ci.yml`：`ubuntu-latest` + `windows-latest` × Python 3.9/3.12，
+执行 `compileall` → `unittest discover` → `mcp --self-test`，不安装 Vivado。
+
+## V11 — BD 语义 diff（真实 BD）
+
+对比 `examples/zynq7020-min/tcl/design_1.tcl` 与"用 recipe 加了 AXI GPIO 后"的导出：
+
+```
+cells added (1):
+  + axi_gpio_recipe
+config changed (6):
+  ~ axi_gpio_recipe.C_GPIO_WIDTH: None -> 16
+  ~ ps7_0_axi_periph.NUM_MI: 1 -> 2
+address changed (1):
+  ~ axi_gpio_recipe/S_AXI/Reg: None -> {'offset': '0x41240000', 'range': '0x00010000'}
+connections added (1):
+  + axi_gpio_recipe/S_AXI <-> ps7_0_axi_periph/M01_AXI
+```
+
+结果：✅ 与预期完全一致；`--json` 输出可机读。
+
+## V12 — recipe 渲染 + 构建 + 幂等
+
+```bash
+python scripts/recipe.py render add_axi_gpio -p name=axi_gpio_recipe -p width=16 -o tcl/patch_gpio.tcl
+VAC_PATCH_TCL=tcl/patch_gpio.tcl VAC_EXPORT_BD=patched.tcl scripts/build.ps1 -ProjectRoot . -StopAfter bd
+```
+
+结果：✅ 退出码 0、0 CRITICAL；导出 BD 中 `CONFIG.C_GPIO_WIDTH {16}` 与回读一致；
+同轮双跑补丁（`patch,patch`）导出的 BD 与单跑**哈希一致**。
+
+## V13 — 日志诊断（真实日志注入已知问题）
+
+在真实构建日志末尾注入一条 `CRITICAL WARNING: [BD 41-759] ...` 后：
+
+```bash
+python scripts/check_build.py build.log --explain
+```
+
+结果：✅ 退出码 2，输出：
+
+```
+HINTS (with action):
+  [BD-41-759] unconnected input pins were tied to 0 (x1)
+      -> connect the per-port resets (S00_ARESETN/M00_ARESETN ...) or set CONFIG.HAS_ARESETN {0}
+      ref: references/pitfalls.md B3
+```
+
+## V14 — MCP 端到端
+
+以子进程方式启动 server，依次调用 `initialize` / `tools/list` / `tools/call`：
+
+| 工具 | 结果 |
+|---|---|
+| `tools/list` | ✅ 6 个工具（vac_build / vac_check_log / vac_bd_diff / vac_bd_export / vac_check_handoff / vac_recipe_render） |
+| `vac_build`（`stop_after=bd`） | ✅ exit_code 0，critical_warnings 0，errors 0 |
+| `vac_check_log` | ✅ exit_code 0，suggestions 0 |
+| `vac_bd_diff` | ✅ `cells_added=["axi_gpio_recipe"]`，`NUM_MI 1->2` |
+| `vac_check_handoff` | ✅ status=pass |
+| `vac_recipe_render` | ✅ 生成 `post_fclk.tcl`（含 `PCW_FPGA0_PERIPHERAL_FREQMHZ {150}`） |
+
+协议错误处理：未知工具 → `-32602`；未知方法 → `-32601`；非法 JSON → `-32700`；
+工具异常 → `isError: true`（不会让 server 崩溃）。

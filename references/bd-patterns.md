@@ -159,6 +159,7 @@ assign_bd_address -offset 0x00000000 -range 0x40000000 \
 `scripts/check_handoff.py` 和 `.hwh` 对照检查。
 
 ### 4.6 外部端口与 XDC 端口漂移
+
 `make_bd_intf_pins_external` / `make_bd_pins_external` 生成顶层端口后，
 XDC 才能约束它们。**BD 大改后端口名可能变**（如 `gpio_io_o_0` → `gpio_io_o_1`），
 XDC 找不到端口时 Vivado 只报 CRITICAL WARNING，约束静默失效。
@@ -187,3 +188,46 @@ if {[string first $scripts_vivado_version $current_vivado_version] == -1} { ... 
 ```
 
 `rebuild.tcl` 已经能识别 `return 1` 并给出明确报错（"BD TCL 版本校验未通过"）。
+
+## 6. 看改动：`bd_diff.py`（BD 语义 diff）
+
+`git diff tcl/design_1.tcl` 在 600~700 行里只告诉你"哪几行变了"。语义 diff 把变化归成 5 类：
+
+```bash
+python scripts/bd_diff.py old.tcl new.tcl            # 人读
+python scripts/bd_diff.py old.tcl new.tcl --json     # 机读
+python scripts/bd_diff.py old.tcl new.tcl --fail-on-change   # CI 门禁（有差异退出 5）
+```
+
+输出示例（示例工程加 AXI GPIO 后）：
+
+```
+cells added (1):
+  + axi_gpio_recipe
+config changed (6):
+  ~ ps7_0_axi_periph.NUM_MI: 1 -> 2
+  ~ axi_gpio_recipe.C_GPIO_WIDTH: None -> 16
+address changed (1):
+  ~ axi_gpio_recipe/S_AXI/Reg: None -> {'offset': '0x41240000', 'range': '0x00010000'}
+connections added (1):
+  + axi_gpio_recipe/S_AXI <-> ps7_0_axi_periph/M01_AXI
+```
+
+典型用法：
+
+- **回写真源前**：`bd_export.tcl` 导出后跑一次 diff，确认改动就是你以为的那几处；
+- **PR review**：把 `--json` 的摘要贴进 PR 描述；
+- **CI 守门**：对"不应该改 BD"的 PR 加 `--fail-on-change`。
+
+## 7. 常用改动：`recipe.py`（参数化补丁）
+
+不想每次抄模板时：
+
+```bash
+python scripts/recipe.py list
+python scripts/recipe.py render add_axi_gpio -p name=axi_gpio_user -p width=8 --out tcl/patch_gpio.tcl
+python scripts/recipe.py render set_fclk -p fclk=150 --out tcl/post_fclk.tcl
+```
+
+生成的脚本自带：守卫库加载、幂等判断、时钟/复位连线、地址分配、属性回读、`validate + save`。
+渲染结果与手写补丁等价，可以 `git diff` 后按需微调。
