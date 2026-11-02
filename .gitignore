@@ -20,7 +20,7 @@ _v3full/
 _v6/
 
 # BD 快照存档（每次构建自动生成，仅本地安全网）
-tcl/archive/
+**/tcl/archive/
 
 # Python
 __pycache__/
