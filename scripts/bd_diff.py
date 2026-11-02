@@ -6,6 +6,8 @@
     看不出"多了一个 IP、`NUM_MI` 从 1 变成 2、地址多了一个 0x41240000"。
     本工具把这些信息解析成结构化差异，用于 code review、PR 描述和 CI 门禁。
 
+解析逻辑在 scripts/lib/bd_parse.py（与 check_handoff.py 共用，避免两处漂移）。
+
 用法：
     python bd_diff.py a.tcl b.tcl
     python bd_diff.py a.tcl b.tcl --json
@@ -15,81 +17,16 @@
     0 = 比较完成（默认：有无差异都返回 0）
     5 = 有差异且指定了 --fail-on-change
     1 = 用法/文件错误
-
-解析范围（best-effort，覆盖 write_bd_tcl 生成脚本的常见写法）：
-    - create_bd_cell -type ip -vlnv <vlnv> <name>
-    - create_bd_cell -type module -reference <ref> <name>
-    - set_property -dict [list CONFIG.X {v} ...] $cell
-    - connect_bd_intf_net / connect_bd_net
-    - assign_bd_address -offset ... -range ... [get_bd_addr_segs <seg>]
 """
 from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 from pathlib import Path
 
-CELL_IP_RE = re.compile(r"create_bd_cell\s+-type\s+ip\s+-vlnv\s+(\S+)\s+(\S+?)\s*\]")
-CELL_MOD_RE = re.compile(r"create_bd_cell\s+-type\s+module\s+-reference\s+(\S+)\s+(\S+?)\s*\]")
-CONFIG_BLOCK_RE = re.compile(r"set_property\s+-dict\s+\[\s*list\s+(.*?)\]\s*(\$?[\w\.\-]+)", re.S)
-CONFIG_ITEM_RE = re.compile(r"CONFIG\.([A-Za-z0-9_]+)\s+\{\s*([^{}]*?)\s*\}")
-ADDR_RE = re.compile(
-    r"assign_bd_address\s+-offset\s+(\S+)\s+-range\s+(\S+)[^\n]*?get_bd_addr_segs\s+([^\]\s]+)"
-)
-NET_RE = re.compile(r"connect_bd_intf_net\s+(.*?)(?=\n|$)")
-PIN_RE = re.compile(r"get_bd_(?:intf_)?pins\s+([^\]]+)\]")
-# write_bd_tcl 对 module_ref 生成的变量形式：
-#   set block_cell_name <name>
-#   if { [catch {set ... [create_bd_cell -type module -reference $block_name $block_cell_name] } ...
-MOD_VAR_RE = re.compile(
-    r"set\s+block_cell_name\s+(\S+)\s*\n\s*if\s*\{\s*\[catch\s*\{\s*set", re.S
-)
-
-
-def _clean(name: str) -> str:
-    return name.strip().strip("$").strip("{}").strip("[]")
-
-
-def load(path: Path) -> str:
-    raw = path.read_text(encoding="utf-8", errors="replace")
-    # 展开 Tcl 续行，让每条语句落在一行里
-    return raw.replace("\\\r\n", " ").replace("\\\n", " ")
-
-
-def parse_bd(text: str) -> dict:
-    cells: dict[str, dict] = {}
-    for vlnv, name in CELL_IP_RE.findall(text):
-        cells[_clean(name)] = {"kind": "ip", "vlnv": vlnv}
-    for ref, name in CELL_MOD_RE.findall(text):
-        name = _clean(name)
-        # write_bd_tcl 对 module_ref 可能写变量名（$block_name/$block_cell_name），跳过
-        if "$" in name or "]" in name or "[" in name or name == "":
-            continue
-        cells[name] = {"kind": "module", "vlnv": ref}
-    # 变量形式的 module_ref：set block_cell_name <name> + create_bd_cell ... $block_cell_name
-    for name in MOD_VAR_RE.findall(text):
-        cells[name] = {"kind": "module", "vlnv": "(module_ref)"}
-
-    configs: dict[str, dict[str, str]] = {}
-    for block, cell in CONFIG_BLOCK_RE.findall(text):
-        cell = _clean(cell)
-        props = configs.setdefault(cell, {})
-        for key, value in CONFIG_ITEM_RE.findall(block):
-            props[key] = value.strip()
-
-    addresses: dict[str, dict[str, str]] = {}
-    for offset, rng, seg in ADDR_RE.findall(text):
-        addresses[seg] = {"offset": offset, "range": rng}
-
-    conns: set[str] = set()
-    for stmt in NET_RE.findall(text):
-        pins = [ _clean(p) for p in PIN_RE.findall(stmt) ]
-        if len(pins) >= 2:
-            conns.add(" <-> ".join(sorted(pins)))
-
-    return {"cells": cells, "configs": configs, "addresses": addresses, "connections": conns}
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+from bd_parse import load, parse_bd  # noqa: E402  （重新导出给测试用）
 
 
 def diff(parsed_a: dict, parsed_b: dict) -> dict:

@@ -24,12 +24,11 @@ import sys
 from pathlib import Path
 import re
 
-# BD TCL: create_bd_cell -type ip -vlnv <vlnv> <instance>
-BD_IP_RE = re.compile(r"create_bd_cell\s+-type\s+ip\s+-vlnv\s+\S+\s+(\S+)")
-BD_MOD_RE = re.compile(r"create_bd_cell\s+-type\s+module\s+-reference\s+(\S+)\s+(\S+)")
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+from bd_parse import load as load_bd, parse_bd, ip_cells, module_cells  # noqa: E402
+
 # .hwh: <MODULE COREREVISION="23" FULLNAME="/axi_dma_0" ...>（属性顺序不固定）
 HWH_MOD_RE = re.compile(r'<MODULE\b[^>]*?\bFULLNAME="/([^"]+)"')
-BD_MOD_VAR_RE = re.compile(r"set\s+block_cell_name\s+(\S+)\s*\n\s*if\s*\{\s*\[catch\s*\{\s*set", re.S)
 
 
 def parse_args() -> argparse.Namespace:
@@ -50,16 +49,13 @@ def main() -> int:
             print(f"file not found: {f}", file=sys.stderr)
             return 1
 
-    bd_text = bd.read_text(encoding="utf-8", errors="replace")
+    bd_text = load_bd(bd)
     hwh_text = hwh.read_text(encoding="utf-8", errors="replace")
 
-    bd_ips = set(BD_IP_RE.findall(bd_text))
-    # write_bd_tcl 对 module_ref 会生成变量形式：
-    #   set block_cell_name adc_3pa1030_sync_0
-    #   if { [catch {set ... [create_bd_cell -type module -reference $block_name $block_cell_name] } ...
-    # 这类实例在 .hwh 里会以 MODULE 出现，必须从 BD 侧解析出来，否则会被误判为"hwh 多余"。
-    bd_mods = {m[1] for m in BD_MOD_RE.findall(bd_text) if "$" not in m[1] and "]" not in m[1]}
-    bd_mods |= set(BD_MOD_VAR_RE.findall(bd_text))
+    # 解析逻辑与 bd_diff.py 共用 scripts/lib/bd_parse.py
+    parsed = parse_bd(bd_text)
+    bd_ips = set(ip_cells(parsed))
+    bd_mods = set(module_cells(parsed))
     hwh_ips = set(HWH_MOD_RE.findall(hwh_text))
 
     only_bd = sorted(bd_ips - hwh_ips)

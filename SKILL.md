@@ -98,7 +98,7 @@ scripts/build.ps1 -ProjectRoot myproj                    # 全量出 bit
 | `scripts/build.ps1` / `build.sh` | 入口：探测 Vivado → 跑 rebuild → 日志门禁 → 透传退出码 |
 | `templates/rebuild.tcl` | 参数化九阶段构建（`VAC_STOP_AFTER` 可只到 bd/synth/impl） |
 | `scripts/bd_export.tcl` | `write_bd_tcl -force` 回写 BD + 带时间戳存档 |
-| `scripts/lib/guards.tcl` | 幂等守卫：`vac_ensure_ip` / `vac_connect_net_if_free` / `vac_ensure_addr` / `vac_verify_prop` |
+| `scripts/lib/guards.tcl` + `guard_loader.tcl` | 幂等守卫：`vac_ensure_ip` / `vac_connect_net_if_free` / `vac_ensure_addr` / `vac_verify_prop` |
 | `scripts/bd_patch_template.tcl` | 增量补丁模板（加 AXI GPIO 的完整示例，连跑两次结果一致） |
 | `scripts/recipe.py` + `scripts/recipes/` | 参数化补丁渲染：`add_axi_gpio` / `add_axi_uartlite` / `add_axi_dma_hp` / `set_fclk` / `open_irq_f2p` |
 | `scripts/bd_diff.py` | BD 语义 diff（cell / CONFIG / 地址 / 连线），`--json`、`--fail-on-change` |

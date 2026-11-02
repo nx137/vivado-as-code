@@ -23,6 +23,8 @@
 
 ### 1. 补丁复制到工程 `tcl/` 后找不到 `guards.tcl`（已修复）
 
+> v0.3.2 起改为共享 `scripts/lib/guard_loader.tcl`：补丁只需找到它，候选路径与错误提示集中在一处。
+
 现象：按 `references/bd-patterns.md` §4.1 把补丁放进 `<proj>/tcl/`，直接报
 `invalid command name "vac_ensure_ip"`（Vivado 退出码 1 / 脚本 2，提示指不到根因）。
 测试助手只能自己把 `scripts/lib/guards.tcl` 复制到 `tcl/lib/` 才跑通。

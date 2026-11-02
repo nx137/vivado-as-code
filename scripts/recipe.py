@@ -40,28 +40,22 @@ PREAMBLE = r"""# ===============================================================
 #   或直接由 rebuild.tcl 自动执行（VAC_PATCH_TCL 支持逗号分隔多个补丁）
 # =============================================================================
 
-# ---- 载入守卫库（多路径查找；也可用 VAC_GUARDS_TCL 指定）------------------
+# ---- 载入守卫库（共享 guard_loader.tcl；候选路径只在那里维护）-------------
 set _here [file dirname [file normalize [info script]]]
-set _guards_cands {}
-if {[info exists env(VAC_GUARDS_TCL)] && $env(VAC_GUARDS_TCL) ne ""} {
-    lappend _guards_cands $env(VAC_GUARDS_TCL)
+set _loader ""
+foreach _c [list \
+    [file join $_here lib guard_loader.tcl] \
+    [file normalize [file join $_here .. scripts lib guard_loader.tcl]] \
+    [file normalize [file join $_here .. .. scripts lib guard_loader.tcl]] \
+] {
+    if {[file exists $_c]} { set _loader $_c; break }
 }
-lappend _guards_cands \
-    [file join $_here lib guards.tcl] \
-    [file join $_here guards.tcl] \
-    [file normalize [file join $_here .. scripts lib guards.tcl]] \
-    [file normalize [file join $_here .. .. scripts lib guards.tcl]] \
-    [file normalize [file join [pwd] scripts lib guards.tcl]]
-set _guards_loaded 0
-foreach _cand $_guards_cands {
-    if {[file exists $_cand]} { source $_cand; set _guards_loaded 1; break }
-}
-if {!$_guards_loaded} {
-    puts "  ERROR: 找不到 guards.tcl；已尝试："
-    foreach _c $_guards_cands { puts "    - $_c" }
-    puts "  解决：复制 scripts/lib/guards.tcl 到补丁同级 lib/，或设置 VAC_GUARDS_TCL"
+if {$_loader eq ""} {
+    puts "  ERROR: 找不到 guard_loader.tcl（scripts/lib/guard_loader.tcl）"
+    puts "  解决：复制整个 scripts/lib/ 到补丁同级 lib/，或设 VAC_GUARDS_TCL"
     exit 1
 }
+source $_loader
 
 if {[llength [get_bd_designs -quiet]] == 0} { fail "没有打开的 BD（请先 source 全量 BD TCL）" }
 set _bd [current_bd_design]

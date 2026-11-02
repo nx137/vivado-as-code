@@ -67,7 +67,7 @@ $env:VAC_POST_BD_TCL = (Resolve-Path tcl/post_fclk150.tcl)
 $env:VAC_PATCH_TCL = "tcl/patch_add_gpio.tcl"     # 相对路径按项目根解析
 Copy-Item ../../scripts/bd_patch_template.tcl tcl\patch_add_gpio.tcl
 New-Item -ItemType Directory -Force tcl\lib | Out-Null
-Copy-Item ../../scripts/lib/guards.tcl tcl\lib\guards.tcl
+Copy-Item ../../scripts/lib/*.tcl tcl\lib\ -Force   # guards.tcl + guard_loader.tcl
 $env:VAC_EXPORT_BD = "bd_exported.tcl"             # 导出补丁后的 BD，便于 diff
 ../../scripts/build.ps1 -ProjectRoot . -StopAfter bd
 

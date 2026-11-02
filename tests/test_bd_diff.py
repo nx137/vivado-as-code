@@ -96,7 +96,7 @@ class BdDiffTest(unittest.TestCase):
         self.assertIn("adc_3pa1030_sync_0", parsed["cells"])
         self.assertEqual(parsed["cells"]["adc_3pa1030_sync_0"]["kind"], "module")
         # 变量名本身不应该被当成实例
-        self.assertNotIn("$block_cell_name", parsed["cells"])
+        self.assertNotIn("block_cell_name", parsed["cells"])
 
 
 if __name__ == "__main__":

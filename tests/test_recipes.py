@@ -26,7 +26,7 @@ class RecipeTest(unittest.TestCase):
         for name in EXPECTED:
             text = recipe.render(name, {})
             self.assertNotIn("@@", text, f"{name} 渲染后仍有占位符")
-            self.assertIn("guards.tcl", text)
+            self.assertIn("guard_loader.tcl", text)
             self.assertIn("vac_finalize", text)
 
     def test_render_override(self) -> None:

@@ -49,7 +49,16 @@ vivado -mode batch -source scripts/bd_export.tcl -tclargs \
 ### 4.1 骨架
 
 ```tcl
-source [file join [file dirname [info script]] lib guards.tcl]
+# 载入守卫库：只定位共享的 guard_loader.tcl（候选路径在它内部维护）
+set _here [file dirname [file normalize [info script]]]
+set _loader ""
+foreach _c [list \
+    [file join $_here lib guard_loader.tcl] \
+    [file normalize [file join $_here .. scripts lib guard_loader.tcl]] \
+    [file normalize [file join $_here .. .. scripts lib guard_loader.tcl]] \
+] { if {[file exists $_c]} { set _loader $_c; break } }
+if {$_loader eq ""} { puts "ERROR: 找不到 guard_loader.tcl"; exit 1 }
+source $_loader
 
 if {[llength [get_bd_designs -quiet]] == 0} { fail "没有打开的 BD" }
 set _bd [current_bd_design]
@@ -64,16 +73,18 @@ vac_verify_prop axi_gpio_user CONFIG.C_GPIO_WIDTH {8}
 vac_finalize $_bd
 ```
 
-**`guards.tcl` 放哪里**：模板会自动依次查找
-`$env:VAC_GUARDS_TCL` → 补丁同目录 `lib/guards.tcl` → 补丁同目录 `guards.tcl` →
-`../scripts/lib/guards.tcl` → `../../scripts/lib/guards.tcl` → `$pwd/scripts/lib/guards.tcl`。
+**`scripts/lib/` 放哪里**：补丁只需找到 `guard_loader.tcl`（同目录 `lib/`、`../scripts/lib/`、
+`../../scripts/lib/` 三处之一）；`guard_loader.tcl` 再负责载入同目录的 `guards.tcl`，
+并支持 `VAC_GUARDS_TCL` 覆盖。候选路径只在 `guard_loader.tcl` 里维护，避免两处漂移。
 
 推荐布局（补丁放工程里）：
 
 ```
 myproj/
 ├── tcl/patch_add_gpio.tcl     # 你的补丁
-└── scripts/lib/guards.tcl     # 从本仓库复制（或整目录复制 scripts/）
+└── scripts/lib/               # 从本仓库复制整个 lib/ 目录
+    ├── guard_loader.tcl       # 载入器（候选路径的唯一来源）
+    └── guards.tcl             # 守卫实现
 ```
 
 补丁放在本仓库 `scripts/` 下时不用复制（`lib/` 就在旁边）。

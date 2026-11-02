@@ -39,26 +39,6 @@ proc vac_ensure_ip {vlnv name {config ""}} {
     return $cell
 }
 
-# 幂等创建 RTL module_ref：已存在则直接返回
-proc vac_ensure_module {reference name {config ""}} {
-    if {[vac_cell_exists $name]} {
-        vac_log "$name 已存在，跳过创建"
-        return [get_bd_cells $name]
-    }
-    set cell [create_bd_cell -type module -reference $reference $name]
-    if {$config ne ""} { set_property -dict $config $cell }
-    vac_log "创建 module $name ($reference)"
-    return $cell
-}
-
-# 幂等删除：不存在则静默跳过
-proc vac_delete_if_exists {name} {
-    if {[vac_cell_exists $name]} {
-        delete_bd_objs [get_bd_cells $name]
-        vac_log "删除 $name"
-    }
-}
-
 # ---- 地址 ---------------------------------------------------------------
 # 确保 (space, seg) 上分配了地址段；-force 覆盖，天然幂等
 proc vac_ensure_addr {offset range space seg} {
@@ -135,12 +115,6 @@ proc vac_verify_prop {cell prop expected} {
         fail "$cell 的属性 $prop 回读为 '$got'，期望 '$expected'（参数名可能写错）"
     }
     vac_log "$cell.$prop = $got"
-}
-
-proc vac_read_prop {cell prop} {
-    set v [get_property $prop [get_bd_cells $cell]]
-    vac_log "$cell.$prop = $v"
-    return $v
 }
 
 # 补丁收尾：校验 + 保存（任何补丁脚本都应以此结尾）

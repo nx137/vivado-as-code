@@ -106,7 +106,7 @@ Note: `StopAfter=bd` also produces a `.hwh` (no `.bit`), useful for PYNQ address
 | `scripts/build.ps1` / `build.sh` | Entry point: detect Vivado → run rebuild → log gate → propagate exit code |
 | `templates/rebuild.tcl` | Parameterized nine-phase build (`VAC_STOP_AFTER` can stop at bd/synth/impl) |
 | `scripts/bd_export.tcl` | `write_bd_tcl -force` round-trip + timestamped archive |
-| `scripts/lib/guards.tcl` | Idempotent guards: `vac_ensure_ip` / `vac_connect_net_if_free` / `vac_ensure_addr` / `vac_verify_prop` |
+| `scripts/lib/guards.tcl` + `guard_loader.tcl` | Idempotent guards: `vac_ensure_ip` / `vac_connect_net_if_free` / `vac_ensure_addr` / `vac_verify_prop` |
 | `scripts/bd_patch_template.tcl` | Incremental patch template (full AXI GPIO example; running twice is safe) |
 | `scripts/recipe.py` + `scripts/recipes/` | Parameterized patches: `add_axi_gpio` / `add_axi_uartlite` / `add_axi_dma_hp` / `set_fclk` / `open_irq_f2p` |
 | `scripts/bd_diff.py` | Semantic BD diff (cells / CONFIG / addresses / connections), `--json`, `--fail-on-change` |

@@ -24,8 +24,8 @@
 #   2) 手动单跑：vivado -mode batch -source scripts/bd_patch_template.tcl
 #   3) GUI Tcl Console：source scripts/bd_patch_template.tcl
 #
-# 依赖：scripts/lib/guards.tcl（模板会自动在 6 个位置查找；也可用 VAC_GUARDS_TCL 指定），
-#       若把补丁复制到 <proj>/tcl/，把 guards.tcl 放到 <proj>/scripts/lib/ 或 <proj>/tcl/lib/。
+# 依赖：scripts/lib/（guards.tcl + guard_loader.tcl；也可用 VAC_GUARDS_TCL 指定 guards.tcl），
+#       若把补丁复制到 <proj>/tcl/，把 scripts/lib/（含 guards.tcl 与 guard_loader.tcl）\n#       复制到 <proj>/scripts/lib/ 或 <proj>/tcl/lib/。
 #
 # 验证幂等（正确做法）：让**同一次构建**把补丁跑两遍——
 #   VAC_PATCH_TCL="tcl/patch_add_gpio.tcl,tcl/patch_add_gpio.tcl" \
@@ -33,34 +33,22 @@
 # 两次导出的 BD 应完全一致。只跑两次 build 不算验证：每次都是干净重建，天然一致。
 # =============================================================================
 
-# ---- 载入守卫库（相对本脚本定位，避免依赖当前目录）----------------------
-# 搜索顺序：环境变量 -> 同目录 lib/ -> 同目录 -> 工程根 scripts/lib/
-# （补丁常被复制到 <proj>/tcl/，而 guards.tcl 在 <proj>/scripts/lib/）
+# ---- 载入守卫库（共享 guard_loader.tcl；候选路径只在那里维护）-------------
 set _here [file dirname [file normalize [info script]]]
-set _guards_cands {}
-if {[info exists env(VAC_GUARDS_TCL)] && $env(VAC_GUARDS_TCL) ne ""} {
-    lappend _guards_cands $env(VAC_GUARDS_TCL)
+set _loader ""
+foreach _c [list \
+    [file join $_here lib guard_loader.tcl] \
+    [file normalize [file join $_here .. scripts lib guard_loader.tcl]] \
+    [file normalize [file join $_here .. .. scripts lib guard_loader.tcl]] \
+] {
+    if {[file exists $_c]} { set _loader $_c; break }
 }
-lappend _guards_cands \
-    [file join $_here lib guards.tcl] \
-    [file join $_here guards.tcl] \
-    [file normalize [file join $_here .. scripts lib guards.tcl]] \
-    [file normalize [file join $_here .. .. scripts lib guards.tcl]] \
-    [file normalize [file join [pwd] scripts lib guards.tcl]]
-set _guards_loaded 0
-foreach _cand $_guards_cands {
-    if {[file exists $_cand]} {
-        source $_cand
-        set _guards_loaded 1
-        break
-    }
-}
-if {!$_guards_loaded} {
-    puts "  ERROR: 找不到 guards.tcl。已尝试："
-    foreach _c $_guards_cands { puts "    - $_c" }
-    puts "  解决：把 scripts/lib/guards.tcl 复制到补丁脚本同级的 lib/ 下，或设 VAC_GUARDS_TCL"
+if {$_loader eq ""} {
+    puts "  ERROR: 找不到 guard_loader.tcl（scripts/lib/guard_loader.tcl）"
+    puts "  解决：复制整个 scripts/lib/ 到补丁同级 lib/，或设 VAC_GUARDS_TCL"
     exit 1
 }
+source $_loader
 
 puts "  \[patch\] 开始增量修改 BD ..."
 
