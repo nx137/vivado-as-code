@@ -65,7 +65,8 @@ MCP server and an AI-agent skill. MIT.
 | 跨版本升级（同版本往返） | ✅ 导出新真源，`bd_diff` 报 `no semantic changes`，重建 BD PASS |
 | 测试 | ✅ **75 个用例**（Python 3.9–3.12，CI 双平台） |
 
-> 详细记录：[`docs/verification.md`](docs/verification.md)；可用性测试与修复：[`docs/usability.md`](docs/usability.md)。
+> 详细记录：[`docs/verification.md`](docs/verification.md)；可用性测试与修复：[`docs/usability.md`](docs/usability.md)；
+> 全量功能审计（v0.3.1）：[`docs/audit-2026-11-02.md`](docs/audit-2026-11-02.md)。
 
 > 依赖：Python ≥ 3.9（脚本与 MCP 全部使用标准库，无需 `pip install`）+ Vivado 2020.2（实跑构建时）。`pytest` 可选，仓库测试用标准库 `unittest`。
 ## 4. 快速开始
