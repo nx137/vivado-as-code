@@ -53,6 +53,7 @@ MCP server and an AI-agent skill. MIT.
 
 > 详细记录：[`docs/verification.md`](docs/verification.md)；可用性测试与修复：[`docs/usability.md`](docs/usability.md)。
 
+> 依赖：Python ≥ 3.9（脚本与 MCP 全部使用标准库，无需 pip install）+ Vivado 2020.2（实跑构建时）。pytest 可选，仓库测试用标准库 unittest。
 ## 4. 快速开始
 
 ### 4.1 作为技能安装（给 AI 助手用）

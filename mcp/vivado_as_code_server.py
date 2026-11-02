@@ -240,7 +240,7 @@ def tool_vac_recipe_render(args: dict) -> dict:
     if out_path:
         out = Path(out_path)
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(text, encoding="utf-8", newline="\n")
+        out.write_bytes(text.encode("utf-8"))  # 3.9 兼容：write_text 的 newline 参数是 3.10+
     return {
         "ok": True,
         "recipe": name,

@@ -163,7 +163,7 @@ def main() -> int:
             print(f"文件已存在（加 --force 覆盖）：{out}", file=sys.stderr)
             return 1
         out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(text, encoding="utf-8", newline="\n")
+        out.write_bytes(text.encode("utf-8"))  # 3.9 兼容：write_text 的 newline 参数是 3.10+
         print(f"已生成：{out}")
     else:
         sys.stdout.write(text)
