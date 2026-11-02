@@ -3,7 +3,7 @@
 ## 1. 全流程
 
 ```
-Phase 1  清理（删工程目录）      ← 除非 VAC_REUSE=1
+Phase 1  清理（删工程目录，每次全量干净重建）
 Phase 2  create_project -part   ← 器件一致性检查
 Phase 3  add RTL (src/*.v,*.sv)
 Phase 4  add XDC (xdc/*.xdc)

@@ -131,7 +131,6 @@ Note: `StopAfter=bd` also produces a `.hwh` (no `.bit`), useful for PYNQ address
 | `VAC_EXPORT_BD` | empty | When set, export the patched BD to `outputs/` |
 | `VAC_COPY_TO` / `VAC_ARTIFACT_NAME` | empty | Copy artifacts to a deploy directory, optionally renamed |
 | `VAC_JOBS` | `8` | Parallel jobs |
-| `VAC_REUSE` | `0` | 1 = reuse the existing project (default is a clean rebuild) |
 | `VAC_CHECK_ALLOW` | empty | Regex allowlist for the log gate (`;`/`,` separated); project-level list in `<root>/.vac-lint-allow` |
 
 ## Minimal runnable example

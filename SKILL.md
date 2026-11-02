@@ -123,7 +123,6 @@ scripts/build.ps1 -ProjectRoot myproj                    # 全量出 bit
 | `VAC_EXPORT_BD` | 空 | 设了就导出"改动后的 BD"到 `outputs/` |
 | `VAC_COPY_TO` / `VAC_ARTIFACT_NAME` | 空 | 把产物复制到部署目录并可改名 |
 | `VAC_JOBS` | `8` | 并行任务数 |
-| `VAC_REUSE` | `0` | 1 = 复用已有工程（默认每次干净重建） |
 | `VAC_CHECK_ALLOW` | 空 | 日志白名单正则（`;`/`,` 分隔）；工程级白名单见 `<root>/.vac-lint-allow` |
 
 ## 最小可跑示例

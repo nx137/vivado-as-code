@@ -23,7 +23,6 @@ param(
     [int]$Jobs = 0,
     [string]$RebuildScript = '',
     [string]$Vivado = '',
-    [switch]$Reuse,
     [switch]$SkipLint
 )
 
@@ -76,7 +75,6 @@ $env:VAC_STOP_AFTER = $StopAfter
 if ($Part) { $env:VAC_PART = $Part }
 if ($Top) { $env:VAC_TOP = $Top }
 if ($Jobs -gt 0) { $env:VAC_JOBS = "$Jobs" }
-if ($Reuse) { $env:VAC_REUSE = '1' }
 
 & $vivadoExe -mode batch -source $RebuildScript -nojournal -log $log
 $code = $LASTEXITCODE

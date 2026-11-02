@@ -28,7 +28,6 @@
 #   VAC_OUT_DIR        产物目录（默认 <root>/outputs）
 #   VAC_COPY_TO        可选，把 .bit/.hwh 复制到该目录
 #   VAC_ARTIFACT_NAME  可选，复制时的文件名（如 PYNQ overlay 名）
-#   VAC_REUSE          1 = 复用已有工程（默认 0，全量清理）
 # =============================================================================
 
 # ---------------------------------------------------------------------------
@@ -75,7 +74,6 @@ if {$copy_to ne "" && [file pathtype $copy_to] ne "absolute"} {
     set copy_to [file normalize [file join $root $copy_to]]
 }
 set artifact_name [env_or VAC_ARTIFACT_NAME ""]
-set reuse         [env_or VAC_REUSE       0]
 set bd_tcl        [env_or VAC_BD_TCL      [file join $root tcl "${bd_name}.tcl"]]
 set patch_raw     [env_or VAC_PATCH_TCL   ""]
 set post_bd_tcl   [env_or VAC_POST_BD_TCL ""]
@@ -115,17 +113,12 @@ puts "   开始      : [clock format [clock seconds]]"
 puts "============================================================================"
 
 # ---------------------------------------------------------------------------
-# Phase 1: 清理 / 复用
+# Phase 1: 清理（每次构建都是全量干净重建）
 # ---------------------------------------------------------------------------
 phase 1 $total "清理旧工程..."
-if {$reuse == 1 && [file exists [file join $proj_dir "${proj_name}.xpr"]]} {
-    puts "  REUSE=1：复用已有工程 $proj_dir"
-    open_project [file join $proj_dir "${proj_name}.xpr"]
-} else {
-    close_project -quiet
-    catch {file delete -force $proj_dir}
-    file mkdir $out_dir
-}
+close_project -quiet
+catch {file delete -force $proj_dir}
+file mkdir $out_dir
 
 # ---------------------------------------------------------------------------
 # Phase 2: 创建工程
@@ -297,14 +290,17 @@ if {[llength $hwh_candidates] > 0} {
 }
 
 # 可选：复制到部署目录（如 PYNQ overlay 目录），支持改名
-if {$copy_to ne "" && $bit_path ne ""} {
-    file mkdir $copy_to
-    set name [expr {$artifact_name ne "" ? $artifact_name : $top}]
-    file copy -force $bit_path [file join $copy_to "${name}.bit"]
-    if {[file exists $hwh_path]} {
+# 必须成对复制：只拷其中一个会让部署目录出现"不同一次构建"的 .bit/.hwh 混搭。
+if {$copy_to ne ""} {
+    if {$bit_path eq "" || ![file exists $hwh_path]} {
+        puts "  跳过 COPY_TO：没有同时拿到 .bit 与 .hwh（StopAfter 不是 impl 时不复制，避免混搭产物）"
+    } else {
+        file mkdir $copy_to
+        set name [expr {$artifact_name ne "" ? $artifact_name : $top}]
+        file copy -force $bit_path [file join $copy_to "${name}.bit"]
         file copy -force $hwh_path [file join $copy_to "${name}.hwh"]
+        puts "  + 已复制到 $copy_to（${name}.bit/.hwh，必须同名同目录）"
     }
-    puts "  + 已复制到 $copy_to（${name}.bit/.hwh，必须同名同目录）"
 }
 
 # ---------------------------------------------------------------------------

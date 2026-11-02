@@ -78,9 +78,18 @@ ELAPSED=$(( $(date +%s) - START ))
 echo ""
 echo "Vivado 退出码: $CODE，耗时 $(( ELAPSED / 60 )) 分 $(( ELAPSED % 60 )) 秒"
 
-if [ "$CODE" -eq 0 ] && command -v python3 >/dev/null 2>&1; then
+if [ "$CODE" -eq 0 ]; then
+    # 日志门禁需要 Python：优先 python3，回退 python。
+    # 注意：要实际执行一次，排除 Windows Store 的 python3 存根（存在但调用即失败）。
+    PYTHON_BIN=""
+    for _cand in python3 python; do
+        if command -v "$_cand" >/dev/null 2>&1 && "$_cand" -c 'import sys' >/dev/null 2>&1; then
+            PYTHON_BIN="$(command -v "$_cand")"
+            break
+        fi
+    done
     CHECKER="$(cd "$(dirname "$0")" && pwd)/check_build.py"
-    if [ -f "$CHECKER" ]; then
+    if [ -n "$PYTHON_BIN" ] && [ -f "$CHECKER" ]; then
         echo "--- 日志门禁 (check_build.py) ---"
         ALLOW_ARGS=()
         if [ -n "${VAC_CHECK_ALLOW:-}" ]; then
@@ -96,12 +105,14 @@ if [ "$CODE" -eq 0 ] && command -v python3 >/dev/null 2>&1; then
                 ALLOW_ARGS+=(--allow "$_pat")
             done < "$PROJECT_ROOT/.vac-lint-allow"
         fi
-        python3 "$CHECKER" "$LOG" --manifest "$PROJECT_ROOT/outputs/build_manifest.json" "${ALLOW_ARGS[@]}"
+        "$PYTHON_BIN" "$CHECKER" "$LOG" --manifest "$PROJECT_ROOT/outputs/build_manifest.json" "${ALLOW_ARGS[@]}"
         LINT=$?
         if [ "$LINT" -ne 0 ]; then
             echo "[BUILD FAILED] 日志含 ERROR / CRITICAL WARNING（退出码 $LINT）"
             exit "$LINT"
         fi
+    else
+        echo "（未找到 python3/python，跳过日志门禁；建议手动 grep -i CRITICAL $LOG）"
     fi
 fi
 
