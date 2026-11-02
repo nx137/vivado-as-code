@@ -1,0 +1,11 @@
+# 统一行尾：文本入库 LF，检出按平台
+* text=auto
+
+# Windows 脚本保留 CRLF（PowerShell 5.1 兼容）
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+
+# Shell / Tcl / Python 强制 LF
+*.sh  text eol=lf
+*.tcl text eol=lf
+*.py  text eol=lf

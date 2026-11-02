@@ -1,0 +1,32 @@
+# ============================================================================
+# Vivado 生成物 —— 本仓库的约定：不提交任何工程文件，只提交"真源"脚本
+# ============================================================================
+vivado_project/
+vivado/*/vivado_project/
+*.xpr
+*.jou
+*.log
+*.str
+*.lck
+.Xil/
+*.backup.jou
+*.backup.log
+*.zip
+
+# 构建产物（.bit/.hwh 由脚本生成，可作为 release 附件而不是源码）
+outputs/
+_mkproj/
+_v3full/
+
+# BD 快照存档（每次构建自动生成，仅本地安全网）
+tcl/archive/
+
+# Python
+__pycache__/
+*.pyc
+
+# IDE / 系统
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini

@@ -1,0 +1,111 @@
+---
+name: vivado-as-code
+description: >
+  用全量 TCL 脚本驱动 Xilinx Vivado，把 Zynq/FPGA 工程做成"工程即代码"：
+  不提交 .xpr，用 rebuild.tcl 一键全量重建，用 write_bd_tcl 把 Block Design
+  固化成文本真源，通过 CONFIG.PCW_* 在 Tcl 里配置 Zynq PS7（时钟/PLL、HP 口、
+  IRQ、MIO 外设、DDR），并用幂等补丁脚本演进设计。适用于：Vivado 全量 TCL /
+  BD 脚本化 / PS7 配置 / 无 .xpr 工程 / 复现 bitstream / 迁移板卡 /
+  PYNQ overlay 交付。当用户提到 "Vivado 全量脚本"、"Block Design 用 Tcl 建"、
+  "PS 端配置"、"write_bd_tcl"、"clone 就能重建" 时使用。
+license: MIT
+---
+
+# vivado-as-code
+
+把 Vivado 工程从"GUI 里点点点 + 提交一堆二进制"变成"文本脚本 + 一条命令重建"。
+
+## 这套方法解决什么问题
+
+- `.xpr/.runs/.gen` 不可 diff、冲突无法合并、换台机器就编译不出来；
+- BD 里改了什么没人知道，只有工程文件能回答；
+- PS 端（Zynq 时钟、HP 口、中断、MIO）配置只存在于 GUI 状态里。
+
+做法：**所有真源都是文本** —— `src/*.v`、`xdc/*.xdc`、`tcl/<bd>.tcl`、`vivado/rebuild.tcl`。
+
+## 五条铁律
+
+1. **仓库不提交 `.xpr` / `.runs` / `.gen`**，只提交 RTL、XDC、BD TCL、构建脚本。
+2. **BD 的改动必须落到 `tcl/<bd>.tcl`** —— GUI 改完立刻 `write_bd_tcl -force` 回写（用 `scripts/bd_export.tcl`）。
+3. **每次验证都做全量重建**（删工程重跑），不要依赖增量缓存，否则"本地能过、别人 clone 不过"。
+4. **构建成功 ≠ 正确**：Vivado 里 IP 参数名写错只报 `CRITICAL WARNING`，照样出 bit。
+   必须跑 `scripts/check_build.py`（0 条 CRITICAL 才算过）。
+5. **产物必须成对且同名**：`.bit` + `.hwh` 同名同目录，否则 PYNQ `Overlay()` 解析不出 `ip_dict`。
+
+## 快速上手（3 步）
+
+```bash
+# 1) 放进技能的搜索路径（或任意位置，直接读本文件也行）
+git clone <this-repo> ~/.claude/skills/vivado-as-code     # Claude Code
+git clone <this-repo> ~/.dsh/skills/vivado-as-code        # DeepSeek Harness
+
+# 2) 用模板起一个工程（或改造已有工程：保留 src/ xdc/，把 BD 导出成 tcl/design_1.tcl）
+cp -r templates/project-skeleton/* myproj/
+cp templates/rebuild.tcl myproj/vivado/rebuild.tcl
+
+# 3) 构建（自动探测 Vivado；先只验 BD 再全量）
+scripts/build.ps1 -ProjectRoot myproj -StopAfter bd     # Windows，约 1 分钟
+scripts/build.sh  -p myproj -s bd                       # Linux/macOS
+scripts/build.ps1 -ProjectRoot myproj                    # 全量出 bit
+```
+
+产物：`outputs/<top>.bit`、`outputs/<top>.hwh`、`outputs/build_manifest.json`、
+`outputs/timing_summary.txt`、`outputs/utilization.txt`。
+
+## 决策树：要做哪类改动？
+
+| 需求 | 做法 | 读这篇 |
+|---|---|---|
+| 改 PS 时钟 / PLL / 分频 | `set_property CONFIG.PCW_FPGA0_PERIPHERAL_FREQMHZ {150} [get_bd_cells processing_system7_0]`，回读 `PCW_ACT_*` 验证 | `references/ps7-config.md` |
+| 新开 DDR 高速口 / 加第二个 DMA | `CONFIG.PCW_USE_S_AXI_HP1 {1}` + 独立 interconnect | `references/ps7-config.md` |
+| 打开 PL→PS 中断 | `PCW_USE_FABRIC_INTERRUPT=1`、`PCW_IRQ_F2P_INTR=1` + `axi_intc` | `references/ps7-config.md` |
+| 加一个外设 IP（GPIO/UART/DMA…） | 写幂等补丁脚本，挂到 `VAC_PATCH_TCL` | `references/bd-patterns.md` + `scripts/bd_patch_template.tcl` |
+| 加/改 RTL 模块 | 放 `src/`，BD 里 `create_bd_cell -type module -reference` | `references/bd-patterns.md` |
+| 从 GUI 改完 BD 回写真源 | `scripts/bd_export.tcl`（自动存档旧版本） | `references/bd-patterns.md` |
+| 构建失败 / 时序不过 / 硬件不工作 | 按"症状 → 根因 → 检查命令"查表 | `references/pitfalls.md` |
+| bit 交给 PYNQ 板子 | 同名 `.bit/.hwh` + FS 常量校准 | `references/pynq-handoff.md` |
+
+## 脚本一览
+
+| 脚本 | 作用 |
+|---|---|
+| `scripts/build.ps1` / `build.sh` | 入口：探测 Vivado → 跑 rebuild → 日志门禁 → 透传退出码 |
+| `templates/rebuild.tcl` | 参数化九阶段构建（`VAC_STOP_AFTER` 可只到 bd/synth/impl） |
+| `scripts/bd_export.tcl` | `write_bd_tcl -force` 回写 BD + 带时间戳存档 |
+| `scripts/lib/guards.tcl` | 幂等守卫：`vac_ensure_ip` / `vac_connect_net_if_free` / `vac_ensure_addr` / `vac_verify_prop` |
+| `scripts/bd_patch_template.tcl` | 增量补丁模板（加 AXI GPIO 的完整示例，连跑两次结果一致） |
+| `scripts/check_build.py` | 日志门禁：ERROR / CRITICAL WARNING / WNS，退出码驱动 CI |
+| `scripts/check_handoff.py` | BD ↔ `.hwh` ↔ `.bit` 一致性（防产物过期/不同名） |
+
+## 环境变量（rebuild.tcl）
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `VAC_PART` | `xc7z020clg400-2` | 器件 |
+| `VAC_TOP` | `design_1_wrapper` | 顶层 module |
+| `VAC_STOP_AFTER` | `impl` | `bd` / `synth` / `impl` |
+| `VAC_BD_TCL` | `<root>/tcl/<bd>.tcl` | BD 真源 |
+| `VAC_PATCH_TCL` | 空 | 逗号分隔的补丁脚本，按顺序执行 |
+| `VAC_POST_BD_TCL` | 空 | 补丁之后的属性覆盖（如改 PS 时钟） |
+| `VAC_EXPORT_BD` | 空 | 设了就导出"改动后的 BD"到 `outputs/` |
+| `VAC_COPY_TO` / `VAC_ARTIFACT_NAME` | 空 | 把产物复制到部署目录并可改名 |
+| `VAC_JOBS` | `8` | 并行任务数 |
+| `VAC_REUSE` | `0` | 1 = 复用已有工程（默认每次干净重建） |
+
+## 最小可跑示例
+
+`examples/zynq7020-min/`：PS7 + FCLK0 100MHz + AXI DMA（MM2S 自环回 S2MM）+ 两座互连，
+**不需要任何 PL 引脚和 XDC**，在任意 xc7z020 板子上都能出 bit。实测（Vivado 2020.2）：
+BD 阶段约 0.5 分钟，全量约 4.8 分钟，WNS +1.932 ns。
+
+```bash
+cd examples/zynq7020-min
+vivado -mode batch -source tcl/mk_min_bd.tcl   # 只需跑一次：生成 tcl/design_1.tcl
+../../scripts/build.ps1 -ProjectRoot .          # 之后每次改脚本都能全量重建
+```
+
+## 适用边界
+
+- 优先 **Zynq-7000（PS7）**；7 系列纯 PL 同样适用；UltraScale+ MPSoC 需把 PS 配置段落换成 `zynq_ultra_ps_e` 的 `CONFIG.PSU__*`。
+- 版本锁定：`write_bd_tcl` 生成的脚本带 Vivado 版本校验（默认 2020.2）。跨版本见 `references/pitfalls.md`。
+- 不负责：Vivado 安装/许可、板级引脚定义（各板不同）、上位机软件。
