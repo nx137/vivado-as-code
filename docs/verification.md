@@ -83,8 +83,19 @@ CONFIG.PCW_FCLK0_PERIPHERAL_DIVISOR1 {3}
 
 ## V6 — 新助手可用性测试
 
-由全新上下文的 AI 助手只依据 `SKILL.md` 完成"给示例加 AXI GPIO 并重建 BD"。
-记录其执行命令、是否成功、以及文档歧义点 → 见 `docs/usability.md`。
+由全新上下文的 AI 助手只依据 `SKILL.md` 完成"给示例加 AXI GPIO 并重建 BD"：
+
+| 检查 | 结果 |
+|---|---|
+| 构建退出码 | 0 |
+| 日志 CRITICAL WARNING | **0** |
+| 导出的 BD / `.hwh` 中出现 `axi_gpio_user` | ✅ / ✅ |
+| 补丁幂等性（1 次 vs 2 次） | ✅ 导出 BD 哈希一致 |
+| 是否需要口头提示 | ❌ 不需要，仅靠文档完成 |
+
+暴露并已修复的三处问题（详见 `docs/usability.md`）：
+补丁复制到工程 `tcl/` 后找不到 `guards.tcl`、快速上手缺 `mkdir`、
+`check_handoff.py` 的 `.hwh` 正则过严。
 
 ## V7 — 技能加载
 

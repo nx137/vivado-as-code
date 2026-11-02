@@ -28,9 +28,32 @@
 # =============================================================================
 
 # ---- 载入守卫库（相对本脚本定位，避免依赖当前目录）----------------------
+# 搜索顺序：环境变量 -> 同目录 lib/ -> 同目录 -> 工程根 scripts/lib/
+# （补丁常被复制到 <proj>/tcl/，而 guards.tcl 在 <proj>/scripts/lib/）
 set _here [file dirname [file normalize [info script]]]
-foreach _cand [list [file join $_here lib guards.tcl] [file join $_here guards.tcl]] {
-    if {[file exists $_cand]} { source $_cand; break }
+set _guards_cands {}
+if {[info exists env(VAC_GUARDS_TCL)] && $env(VAC_GUARDS_TCL) ne ""} {
+    lappend _guards_cands $env(VAC_GUARDS_TCL)
+}
+lappend _guards_cands \
+    [file join $_here lib guards.tcl] \
+    [file join $_here guards.tcl] \
+    [file normalize [file join $_here .. scripts lib guards.tcl]] \
+    [file normalize [file join $_here .. .. scripts lib guards.tcl]] \
+    [file normalize [file join [pwd] scripts lib guards.tcl]]
+set _guards_loaded 0
+foreach _cand $_guards_cands {
+    if {[file exists $_cand]} {
+        source $_cand
+        set _guards_loaded 1
+        break
+    }
+}
+if {!$_guards_loaded} {
+    puts "  ERROR: 找不到 guards.tcl。已尝试："
+    foreach _c $_guards_cands { puts "    - $_c" }
+    puts "  解决：把 scripts/lib/guards.tcl 复制到补丁脚本同级的 lib/ 下，或设 VAC_GUARDS_TCL"
+    exit 1
 }
 
 puts "  \[patch\] 开始增量修改 BD ..."

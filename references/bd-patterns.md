@@ -64,6 +64,20 @@ vac_verify_prop axi_gpio_user CONFIG.C_GPIO_WIDTH {8}
 vac_finalize $_bd
 ```
 
+**`guards.tcl` 放哪里**：模板会自动依次查找
+`$env:VAC_GUARDS_TCL` → 补丁同目录 `lib/guards.tcl` → 补丁同目录 `guards.tcl` →
+`../scripts/lib/guards.tcl` → `../../scripts/lib/guards.tcl` → `$pwd/scripts/lib/guards.tcl`。
+
+推荐布局（补丁放工程里）：
+
+```
+myproj/
+├── tcl/patch_add_gpio.tcl     # 你的补丁
+└── scripts/lib/guards.tcl     # 从本仓库复制（或整目录复制 scripts/）
+```
+
+补丁放在本仓库 `scripts/` 下时不用复制（`lib/` 就在旁边）。
+
 ### 4.2 幂等的四条规则（都是踩坑换来的）
 
 1. **创建用 `vac_ensure_ip` / `vac_ensure_module`**，不要裸 `create_bd_cell`（重复执行会报 cell 重名）。

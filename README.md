@@ -29,8 +29,10 @@
 | PS 时钟菜谱（FCLK0 100→150 MHz） | ✅ 回读 `ACT_FPGA0=150.000000`，分频自动变 4/3 |
 | 日志门禁负例（注入 CRITICAL） | ✅ 退出码 2，正确拦截 |
 | 产物一致性检查 | ✅ BD/`.hwh`/`.bit` 一致 |
+| 新助手仅凭文档完成任务（V6） | ✅ 加 AXI GPIO 并重建 BD，0 CRITICAL，幂等 |
 
-> 完整记录见 [`docs/verification.md`](docs/verification.md)（含命令与原始输出摘要）。
+> 完整记录见 [`docs/verification.md`](docs/verification.md)（含命令与原始输出摘要）；
+> 可用性测试的发现与修复见 [`docs/usability.md`](docs/usability.md)。
 
 ## 3. 快速开始
 
