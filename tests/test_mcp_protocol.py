@@ -59,8 +59,7 @@ class McpProtocolTest(unittest.TestCase):
         names = {t["name"] for t in tools}
         self.assertEqual(names, {
             "vac_build", "vac_check_log", "vac_bd_diff",
-            "vac_bd_export", "vac_check_handoff", "vac_recipe_render",
-            "vac_ps7_render", "vac_bd_upgrade",
+            "vac_bd_export", "vac_check_handoff", "vac_ps7_render",
         })
         for tool in tools:
             self.assertIn("description", tool)
@@ -118,7 +117,7 @@ class McpProtocolTest(unittest.TestCase):
         proc = subprocess.run([sys.executable, str(SERVER), "--self-test"],
                               capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertIn("tools=8", proc.stderr)
+        self.assertIn("tools=6", proc.stderr)
 
 
 if __name__ == "__main__":

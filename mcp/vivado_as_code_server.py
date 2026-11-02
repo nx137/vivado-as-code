@@ -3,7 +3,7 @@
 
 目的：
     让 Claude Code / DeepSeek Harness 等支持 MCP 的宿主**直接调用**构建、检查、
-    语义 diff、recipe 渲染，而不是每次会话都靠读文档拼命令。
+    语义 diff，而不是每次会话都靠读文档拼命令。
 
 协议：
     JSON-RPC 2.0 over stdio，MCP 2024-11-05 子集：
@@ -11,7 +11,7 @@
 
 约束（重要）：
     - **stdout 只输出协议 JSON**；所有日志/错误信息走 stderr；
-    - 工具会读写工程目录（vac_build / vac_bd_export / vac_recipe_render）；
+    - 工具会读写工程目录（vac_build / vac_bd_export）；
     - 全量构建可能 30–60 分钟，vac_build 默认超时 3600s。
 
 用法：
@@ -33,7 +33,7 @@ import sys
 from pathlib import Path
 
 SERVER_NAME = "vivado-as-code"
-SERVER_VERSION = "0.3.0"
+SERVER_VERSION = "0.3.3"
 PROTOCOL_VERSION = "2024-11-05"
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -230,29 +230,6 @@ def tool_vac_check_handoff(args: dict) -> dict:
     return data
 
 
-def tool_vac_recipe_render(args: dict) -> dict:
-    name = str(args.get("recipe", "")).strip()
-    params = args.get("params") or {}
-    if not isinstance(params, dict):
-        raise ValueError("params 必须是对象")
-    sys.path.insert(0, str(SCRIPTS))
-    import recipe  # noqa: E402
-
-    text = recipe.render(name, {k: str(v) for k, v in params.items()})
-    out_path = str(args.get("out_path", "") or "")
-    if out_path:
-        out = Path(out_path)
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_bytes(text.encode("utf-8"))  # 3.9 兼容：write_text 的 newline 参数是 3.10+
-    return {
-        "ok": True,
-        "recipe": name,
-        "out_path": out_path or None,
-        "bytes": len(text.encode("utf-8")),
-        "preview": ascii_safe(text[:1500]),
-    }
-
-
 def tool_vac_ps7_render(args: dict) -> dict:
     """把声明式 PS7 配置（YAML）渲染成带回读断言的 Tcl。"""
     yaml_path = str(args.get("ps7_yaml", "")).strip()
@@ -280,33 +257,6 @@ def tool_vac_ps7_render(args: dict) -> dict:
     }
 
 
-def tool_vac_bd_upgrade(args: dict) -> dict:
-    """跨 Vivado 版本升级 BD：放宽版本校验 → upgrade_ip → validate → 导出新真源。"""
-    bd_in = str(args.get("bd_in", "")).strip()
-    bd_out = str(args.get("bd_out", "")).strip()
-    if not bd_in or not Path(bd_in).is_file():
-        raise ValueError(f"输入 BD TCL 不存在：{bd_in}")
-    if not bd_out:
-        raise ValueError("需要 bd_out")
-    part = str(args.get("part", "") or "xc7z020clg400-2")
-    timeout = int(args.get("timeout_sec", 1800))
-    vivado = find_vivado()
-    log_path = str(Path(bd_out).parent / "bd_upgrade.log")
-    cmd = [vivado, "-mode", "batch", "-source", str(SCRIPTS / "bd_upgrade.tcl"),
-           "-nojournal", "-log", log_path, "-tclargs", bd_in, bd_out, part]
-    proc = subprocess.run(cmd, capture_output=True, text=True,
-                          encoding="utf-8", errors="replace", timeout=timeout)
-    return {
-        "ok": proc.returncode == 0 and Path(bd_out).is_file(),
-        "exit_code": proc.returncode,
-        "bd_out": bd_out,
-        "log_path": log_path,
-        "stdout_tail": ascii_safe(proc.stdout[-2500:]),
-        "stderr_tail": ascii_safe(proc.stderr[-1500:]),
-    }
-
-
-# ---------------------------------------------------------------------------
 # 工具声明
 # ---------------------------------------------------------------------------
 TOOLS = [
@@ -398,35 +348,6 @@ TOOLS = [
             "required": ["ps7_yaml"],
         },
     },
-    {
-        "name": "vac_bd_upgrade",
-        "description": "Upgrade a Block Design TCL across Vivado versions (relax version guard -> upgrade_ip -> "
-                       "validate -> write_bd_tcl). Runs Vivado in batch mode; may take a few minutes.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "bd_in": {"type": "string", "description": "旧版本 BD TCL"},
-                "bd_out": {"type": "string", "description": "导出新版本 BD TCL 的路径"},
-                "part": {"type": "string", "default": "xc7z020clg400-2"},
-                "timeout_sec": {"type": "integer", "default": 1800},
-            },
-            "required": ["bd_in", "bd_out"],
-        },
-    },
-{
-        "name": "vac_recipe_render",
-        "description": "Render a parameterized BD patch recipe (add_axi_gpio / add_axi_uartlite / "
-                       "add_axi_dma_hp / set_fclk / open_irq_f2p). Writes the generated Tcl file.",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "recipe": {"type": "string"},
-                "params": {"type": "object", "additionalProperties": {"type": ["string", "number"]}},
-                "out_path": {"type": "string"},
-            },
-            "required": ["recipe"],
-        },
-    },
 ]
 
 HANDLERS = {
@@ -435,9 +356,7 @@ HANDLERS = {
     "vac_bd_diff": tool_vac_bd_diff,
     "vac_bd_export": tool_vac_bd_export,
     "vac_check_handoff": tool_vac_check_handoff,
-    "vac_recipe_render": tool_vac_recipe_render,
     "vac_ps7_render": tool_vac_ps7_render,
-    "vac_bd_upgrade": tool_vac_bd_upgrade,
 }
 
 

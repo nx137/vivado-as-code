@@ -214,14 +214,14 @@ python scripts/bd_diff.py old.tcl new.tcl --fail-on-change   # CI 门禁（有�
 
 ```
 cells added (1):
-  + axi_gpio_recipe
+  + axi_gpio_user
 config changed (6):
   ~ ps7_0_axi_periph.NUM_MI: 1 -> 2
-  ~ axi_gpio_recipe.C_GPIO_WIDTH: None -> 16
+  ~ axi_gpio_user.C_GPIO_WIDTH: None -> 16
 address changed (1):
-  ~ axi_gpio_recipe/S_AXI/Reg: None -> {'offset': '0x41240000', 'range': '0x00010000'}
+  ~ axi_gpio_user/S_AXI/Reg: None -> {'offset': '0x41240000', 'range': '0x00010000'}
 connections added (1):
-  + axi_gpio_recipe/S_AXI <-> ps7_0_axi_periph/M01_AXI
+  + axi_gpio_user/S_AXI <-> ps7_0_axi_periph/M01_AXI
 ```
 
 典型用法：
@@ -229,16 +229,3 @@ connections added (1):
 - **回写真源前**：`bd_export.tcl` 导出后跑一次 diff，确认改动就是你以为的那几处；
 - **PR review**：把 `--json` 的摘要贴进 PR 描述；
 - **CI 守门**：对"不应该改 BD"的 PR 加 `--fail-on-change`。
-
-## 7. 常用改动：`recipe.py`（参数化补丁）
-
-不想每次抄模板时：
-
-```bash
-python scripts/recipe.py list
-python scripts/recipe.py render add_axi_gpio -p name=axi_gpio_user -p width=8 --out tcl/patch_gpio.tcl
-python scripts/recipe.py render set_fclk -p fclk=150 --out tcl/post_fclk.tcl
-```
-
-生成的脚本自带：守卫库加载、幂等判断、时钟/复位连线、地址分配、属性回读、`validate + save`。
-渲染结果与手写补丁等价，可以 `git diff` 后按需微调。

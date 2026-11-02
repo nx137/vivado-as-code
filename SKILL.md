@@ -36,7 +36,7 @@ license: MIT
 
 ## 如果宿主已挂载本仓库的 MCP（优先用工具）
 
-`mcp/vivado_as_code_server.py` 提供 8 个工具，比手拼命令更可靠（参数校验、结构化返回）：
+`mcp/vivado_as_code_server.py` 提供 6 个工具，比手拼命令更可靠（参数校验、结构化返回）：
 
 | 工具 | 什么时候用 |
 |---|---|
@@ -45,9 +45,7 @@ license: MIT
 | `vac_bd_diff` | 改完 BD 看语义差异（新增 cell / CONFIG / 地址） |
 | `vac_bd_export` | GUI 改完回写真源 |
 | `vac_check_handoff` | 交付 PYNQ 前检查 `.bit/.hwh` 一致性 |
-| `vac_recipe_render` | 生成参数化补丁（GPIO/UART/DMA/时钟/中断） |
 | `vac_ps7_render` | 把 `ps7.yaml` 渲染成带回读断言的 Tcl |
-| `vac_bd_upgrade` | 跨 Vivado 版本升级 BD 并导出新真源 |
 
 接入方式见 `mcp/README.md`（`.mcp.json` 一份配置同时适用 Claude Code 与 DSH）。
 没有 MCP 时，按下文用 CLI 完成同样的操作。
@@ -82,13 +80,12 @@ scripts/build.ps1 -ProjectRoot myproj                    # 全量出 bit
 | 改 PS 时钟 / PLL / 分频 | 推荐声明式：`ps7.yaml` 写 `clocks.fclk0: 150` → `python scripts/ps7_config.py render ps7.yaml --out tcl/post_bd_ps7.tcl`，产物自带回读断言 | `references/ps7-config.md` |
 | 新开 DDR 高速口 / 加第二个 DMA | `ps7.yaml` 的 `hp_ports: [0, 1]`；BD 侧用独立 interconnect | `references/ps7-config.md` |
 | 打开 PL→PS 中断 | `ps7.yaml` 的 `irq_f2p: true` + BD 侧 `axi_intc` | `references/ps7-config.md` |
-| 加一个外设 IP（GPIO/UART/DMA…） | 优先用参数化 recipe：`python scripts/recipe.py render add_axi_gpio -p name=xxx --out tcl/patch_gpio.tcl`；复杂改动再写幂等补丁，挂到 `VAC_PATCH_TCL` | `scripts/recipes/` + `references/bd-patterns.md` |
+| 加一个外设 IP（GPIO/UART/DMA…） | 写幂等补丁：用 `guards.tcl` 的 `vac_ensure_ip` / `vac_connect_net_if_free` / `vac_ensure_addr` / `vac_verify_prop`，挂到 `VAC_PATCH_TCL` | `references/bd-patterns.md` §4 |
 | 看 BD 到底改了什么 | `python scripts/bd_diff.py a.tcl b.tcl`（加 `--json` / `--fail-on-change`） | `references/bd-patterns.md` §6 |
 | 构建失败 / 时序不过 / 硬件不工作 | `python scripts/check_build.py build.log --explain`，再按"症状 → 根因 → 检查命令"查表 | `references/pitfalls.md` |
 | 加/改 RTL 模块 | 放 `src/`，BD 里 `create_bd_cell -type module -reference` | `references/bd-patterns.md` |
 | 从 GUI 改完 BD 回写真源 | `scripts/bd_export.tcl`（自动存档旧版本） | `references/bd-patterns.md` |
 | 接入已有工程（不改原布局） | 写 `vivado/rebuild_vac.tcl` 适配器设置 `VAC_SRC_DIR`/`VAC_XDC_DIR`/`VAC_PATCH_TCL` 等，`-RebuildScript` 指向它 | `examples/real-project-adoption/` + `references/build-pipeline.md` §7 |
-| 升级到新版本 Vivado | `vivado -mode batch -source scripts/bd_upgrade.tcl -tclargs 旧.tcl 新.tcl <part>`，再用 `bd_diff.py` 复核 | `references/version-upgrade.md` |
 | bit 交给 PYNQ 板子 | 同名 `.bit/.hwh` + FS 常量校准 | `references/pynq-handoff.md` |
 
 ## 脚本一览
@@ -99,13 +96,10 @@ scripts/build.ps1 -ProjectRoot myproj                    # 全量出 bit
 | `templates/rebuild.tcl` | 参数化九阶段构建（`VAC_STOP_AFTER` 可只到 bd/synth/impl） |
 | `scripts/bd_export.tcl` | `write_bd_tcl -force` 回写 BD + 带时间戳存档 |
 | `scripts/lib/guards.tcl` + `guard_loader.tcl` | 幂等守卫：`vac_ensure_ip` / `vac_connect_net_if_free` / `vac_ensure_addr` / `vac_verify_prop` |
-| `scripts/bd_patch_template.tcl` | 增量补丁模板（加 AXI GPIO 的完整示例，连跑两次结果一致） |
-| `scripts/recipe.py` + `scripts/recipes/` | 参数化补丁渲染：`add_axi_gpio` / `add_axi_uartlite` / `add_axi_dma_hp` / `set_fclk` / `open_irq_f2p` |
 | `scripts/bd_diff.py` | BD 语义 diff（cell / CONFIG / 地址 / 连线），`--json`、`--fail-on-change` |
 | `scripts/check_build.py` | 日志门禁：ERROR / CRITICAL WARNING / WNS + `--explain` 修复建议 |
 | `scripts/check_handoff.py` | BD ↔ `.hwh` ↔ `.bit` 一致性（防产物过期/不同名） |
 | `scripts/ps7_config.py` | 声明式 PS7 配置：`ps7.yaml` → 带回读断言的 Tcl |
-| `scripts/bd_upgrade.tcl` | 跨 Vivado 版本升级 BD（放宽版本校验 → upgrade_ip → 导出新真源） |
 | `mcp/vivado_as_code_server.py` | MCP server（零依赖 stdio），把上面这些暴露成 AI 工具 |
 
 ## 环境变量（rebuild.tcl）

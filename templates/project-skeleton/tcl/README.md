@@ -8,4 +8,4 @@
 
 改 BD 的两条路：
 - **大改**：GUI 改 → `bd_export.tcl` 回写 → 全量重建验证 → commit；
-- **小改/加外设**：写幂等补丁脚本（参考 `scripts/bd_patch_template.tcl`），挂到 `VAC_PATCH_TCL`。
+- **小改/加外设**：写幂等补丁脚本（参考 `references/bd-patterns.md` §4 的补丁骨架），挂到 `VAC_PATCH_TCL`。

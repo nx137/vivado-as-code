@@ -31,19 +31,16 @@
 | Capability | Usage | Notes |
 |---|---|---|
 | **Declarative PS7 config** | `python scripts/ps7_config.py render ps7.yaml --out tcl/post_bd_ps7.tcl` | Describe intent (FCLK / HP ports / IRQ / MIO / DDR) in YAML; the generated Tcl **reads properties back and fails** on mismatch. Unknown keys are rejected. |
-| **Cross-version upgrade** | `vivado -mode batch -source scripts/bd_upgrade.tcl -tclargs old.tcl new.tcl <part>` | Relax the version guard → `upgrade_ip` → validate → export a new source of truth; prints IP definitions before/after. |
-| **MCP: 8 tools** | `vac_ps7_render` / `vac_bd_upgrade` | Agents can render PS7 config and upgrade designs directly. |
 | **Full English docs** | this file / [`SKILL.en.md`](SKILL.en.md) | For English-speaking users and agents. |
 
 ### v0.2
 
 | Capability | Usage | Notes |
 |---|---|---|
-| **MCP server** | `python mcp/vivado_as_code_server.py` | Tools: `vac_build` / `vac_check_log` / `vac_bd_diff` / `vac_bd_export` / `vac_check_handoff` / `vac_recipe_render` / `vac_ps7_render` / `vac_bd_upgrade`. One `.mcp.json` works for both Claude Code and DSH. |
-| **Parameterized recipes** | `python scripts/recipe.py render add_axi_gpio -p name=xxx --out tcl/patch.tcl` | Five recipes: `add_axi_gpio` / `add_axi_uartlite` / `add_axi_dma_hp` / `set_fclk` / `open_irq_f2p`, idempotent with property read-back. |
+| **MCP server** | `python mcp/vivado_as_code_server.py` | Tools: `vac_build` / `vac_check_log` / `vac_bd_diff` / `vac_bd_export` / `vac_check_handoff` / `vac_ps7_render`. One `.mcp.json` works for both Claude Code and DSH. |
 | **Semantic BD diff** | `python scripts/bd_diff.py old.tcl new.tcl --json` | Cells, CONFIG changes, address changes, connection changes; `--fail-on-change` for CI gating. |
 | **Log diagnosis** | `python scripts/check_build.py build.log --explain` | Known errors (`BD 41-759/758/701`, version lock, Vivado environment) → action + relevant `pitfalls.md` section. |
-| **Tests + CI** | `python -m unittest discover -s tests -t . -v` | 74 cases; GitHub Actions on Ubuntu/Windows × Python 3.9/3.12; no Vivado required. |
+| **Tests + CI** | `python -m unittest discover -s tests -t . -v` | 66 cases; GitHub Actions on Ubuntu/Windows × Python 3.9/3.12; no Vivado required. |
 
 ## 3. Measured results (Vivado 2020.2 / xc7z020clg400-2)
 
@@ -52,17 +49,15 @@
 | Rebuild BD + `.hwh` from BD Tcl | ✅ ~**0.5 min**, 0 ERROR / 0 CRITICAL |
 | Patch idempotency (same build, patch twice) | ✅ exported BD **byte-identical** |
 | Full synthesis + implementation + bitstream | ✅ ~**4.8 min**, `.bit` 3.95 MB, **WNS +1.932 ns** |
-| PS clock recipe (FCLK0 100→150 MHz) | ✅ `ACT=150.000000` read back |
+| PS7 clock override (FCLK0 100→150 MHz) | ✅ `ACT=150.000000` read back |
 | Declarative PS7 (yaml → Tcl → build) | ✅ `fclk0: 150` → `ACT=150.000000`, 0 CRITICAL |
-| Cross-version upgrade (same version round trip) | ✅ new source exported, `bd_diff` reports `no semantic changes`, rebuild PASS |
-| Recipe render → build | ✅ `add_axi_gpio` patch, 0 CRITICAL, idempotent |
 | Semantic diff | ✅ reports cell add, `NUM_MI 1→2`, address `0x41240000` |
 | Log diagnosis | ✅ injected `BD 41-759` → action + `pitfalls.md` B3 |
-| MCP end-to-end | ✅ 8 tools listed; `vac_build`/`vac_bd_diff`/`vac_check_handoff` return structured results |
+| MCP end-to-end | ✅ 6 tools listed; `vac_build`/`vac_bd_diff`/`vac_check_handoff`/`vac_ps7_render` return structured results |
 | Clean clone end-to-end | ✅ exit 0, `RESULT: PASS` |
 | Real project adoption (20 IP + 12 RTL) | ✅ BD 0.8 min; full build 16.1 min, bit 3.95 MB; gate caught 3 wiring defects + 1 marginal timing violation |
 
-> Details: [`docs/verification.md`](docs/verification.md); usability study: [`docs/usability.md`](docs/usability.md).
+> See `references/` for details and `examples/` for runnable samples.
 
 Dependencies: Python ≥ 3.9 (scripts and MCP use only the standard library; no `pip install`) + Vivado 2020.2 for actual builds.
 
@@ -148,22 +143,17 @@ Measured adoption notes and copy-ready files: [`examples/real-project-adoption/`
 ├── SKILL.md                 # skill entry: rules, decision table, tool list, on-demand references
 ├── SKILL.en.md              # English mirror
 ├── references/
-│   ├── ps7-config.md        # PS7 recipes (clocks/HP/IRQ/MIO/DDR) + declarative config
-│   ├── bd-patterns.md       # BD as Tcl: export, idempotent patches, addresses, diff, recipes
+│   ├── ps7-config.md        # PS7 config patterns (clocks/HP/IRQ/MIO/DDR) + declarative config
+│   ├── bd-patterns.md       # BD as Tcl: export, idempotent patches, addresses, diff
 │   ├── build-pipeline.md    # nine phases, staged validation, log gate, layout conventions
 │   ├── pitfalls.md          # symptom → root cause → check command (20+ entries)
-│   ├── version-upgrade.md   # moving a design to a newer Vivado
 │   └── pynq-handoff.md      # .bit/.hwh, overlay, FS calibration, consistency checks
 ├── scripts/
 │   ├── build.ps1 / build.sh # build entry (Vivado discovery, log gate)
 │   ├── bd_export.tcl        # write_bd_tcl round-trip + archive
-│   ├── bd_patch_template.tcl# idempotent patch template
 │   ├── lib/guards.tcl       # idempotent guard library
-│   ├── recipe.py            # parameterized patch renderer
-│   ├── recipes/             # five patch templates
 │   ├── bd_diff.py           # semantic BD diff
 │   ├── ps7_config.py        # declarative PS7 config (yaml → Tcl)
-│   ├── bd_upgrade.tcl       # cross-version BD upgrade
 │   ├── check_build.py       # log gate + --explain diagnosis
 │   └── check_handoff.py     # BD ↔ .hwh ↔ .bit consistency
 ├── mcp/
@@ -175,9 +165,9 @@ Measured adoption notes and copy-ready files: [`examples/real-project-adoption/`
 ├── examples/zynq7020-min/   # runnable minimal example (PS7 + DMA loopback, no pin constraints)
 ├── examples/ps7/            # declarative PS7 example
 ├── examples/real-project-adoption/  # real-project adoption template
-├── tests/                   # 74 unit/protocol tests (no Vivado needed)
+├── tests/                   # 66 unit/protocol tests (no Vivado needed)
 ├── .github/workflows/ci.yml # Ubuntu/Windows × Python 3.9/3.12
-└── docs/                    # verification log, usability study, self-hosted CI template
+└── docs/                    # self-hosted CI template
 ```
 
 ## 6. Core conventions
@@ -194,7 +184,7 @@ Measured adoption notes and copy-ready files: [`examples/real-project-adoption/`
   UltraScale+ MPSoC needs the PS section rewritten with `zynq_ultra_ps_e` / `CONFIG.PSU__*`.
 - Does not install or license Vivado (examples use the WebPACK-covered xc7z020).
 - Ships no board pin definitions — board-level XDC is your responsibility.
-- BD Tcl carries a Vivado version guard; the upgrade path is in `references/version-upgrade.md`.
+- BD Tcl carries a Vivado version guard; cross-version path: open the design in the new Vivado, run Report IP Status to upgrade, then `write_bd_tcl` again (`references/pitfalls.md` A4).
 
 ## 8. Origin and license
 

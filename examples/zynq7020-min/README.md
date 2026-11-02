@@ -63,9 +63,8 @@ $env:VAC_POST_BD_TCL = (Resolve-Path tcl/post_fclk150.tcl)
 ```
 
 ```bash
-# 加一个 AXI GPIO（幂等补丁，可重复执行）
+# 加外设：按 references/bd-patterns.md §4 写一个幂等补丁 tcl/patch_add_gpio.tcl
 $env:VAC_PATCH_TCL = "tcl/patch_add_gpio.tcl"     # 相对路径按项目根解析
-Copy-Item ../../scripts/bd_patch_template.tcl tcl\patch_add_gpio.tcl
 New-Item -ItemType Directory -Force tcl\lib | Out-Null
 Copy-Item ../../scripts/lib/*.tcl tcl\lib\ -Force   # guards.tcl + guard_loader.tcl
 $env:VAC_EXPORT_BD = "bd_exported.tcl"             # 导出补丁后的 BD，便于 diff

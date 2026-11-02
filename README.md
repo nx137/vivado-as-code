@@ -33,19 +33,16 @@ MCP server and an AI-agent skill. MIT.
 | 能力 | 用法 | 说明 |
 |---|---|---|
 | **PS7 声明式配置** | `python scripts/ps7_config.py render ps7.yaml --out tcl/post_bd_ps7.tcl` | 用 `ps7.yaml` 写设计意图（FCLK/HP 口/IRQ/MIO/DDR），生成**带回读断言**的 Tcl；未知键直接报错 |
-| **跨版本升级助手** | `vivado -mode batch -source scripts/bd_upgrade.tcl -tclargs 旧.tcl 新.tcl <part>` | 放宽版本校验 → `upgrade_ip` → `validate` → 导出新真源，并打印升级前后 IP 定义 |
-| **MCP 扩到 8 工具** | `vac_ps7_render` / `vac_bd_upgrade` | AI 可直接渲染 PS7 配置、执行跨版本升级 |
 | **全套英文文档** | [`README.en.md`](README.en.md) / [`SKILL.en.md`](SKILL.en.md) | 英文用户与英文 agent 可直接使用 |
 
 ### v0.2 新增
 
 | 能力 | 用法 | 说明 |
 |---|---|---|
-| **MCP server** | `python mcp/vivado_as_code_server.py` | 8 个工具：`vac_build` / `vac_check_log` / `vac_bd_diff` / `vac_bd_export` / `vac_check_handoff` / `vac_recipe_render` / `vac_ps7_render` / `vac_bd_upgrade`；`.mcp.json` 一份配置同时适用 Claude Code 与 DSH |
-| **参数化补丁 recipes** | `python scripts/recipe.py render add_axi_gpio -p name=xxx --out tcl/patch.tcl` | 5 个：`add_axi_gpio` / `add_axi_uartlite` / `add_axi_dma_hp` / `set_fclk` / `open_irq_f2p`，自带幂等与属性回读 |
+| **MCP server** | `python mcp/vivado_as_code_server.py` | 6 个工具：`vac_build` / `vac_check_log` / `vac_bd_diff` / `vac_bd_export` / `vac_check_handoff` / `vac_ps7_render`；`.mcp.json` 一份配置同时适用 Claude Code 与 DSH |
 | **BD 语义 diff** | `python scripts/bd_diff.py old.tcl new.tcl --json` | 新增/删除 cell、CONFIG 变更、地址变更、连线变更；`--fail-on-change` 可做 CI 门禁 |
 | **日志诊断** | `python scripts/check_build.py build.log --explain` | 已知错误模式（BD 41-759/758/701、版本锁、Vivado 环境）→ 修复动作 + pitfalls 章节 |
-| **测试与 CI** | `python -m unittest discover -s tests -t . -v` | 75 个用例，GitHub Actions 双平台 × Python 3.9/3.12，不需要 Vivado |
+| **测试与 CI** | `python -m unittest discover -s tests -t . -v` | 66 个用例，GitHub Actions 双平台 × Python 3.9/3.12，不需要 Vivado |
 
 ## 3. 实测（Vivado 2020.2 / xc7z020clg400-2）
 
@@ -54,21 +51,19 @@ MCP server and an AI-agent skill. MIT.
 | 从 BD TCL 重建 BD + `.hwh` | ✅ 约 **0.5 分钟**，0 ERROR / 0 CRITICAL |
 | 增量补丁幂等性（同轮双跑） | ✅ 导出 BD **哈希完全一致** |
 | 全量综合 + 实现 + 生成 bit | ✅ 约 **4.8 分钟**，`.bit` 3.95 MB，**WNS +1.932 ns** |
-| PS 时钟菜谱（FCLK0 100→150 MHz） | ✅ 回读 `ACT=150.000000`，分频自动 4/3 |
-| recipe 渲染 → 构建 | ✅ `add_axi_gpio` 参数化补丁 0 CRITICAL、幂等 |
+| PS7 时钟覆盖（FCLK0 100→150 MHz） | ✅ 回读 `ACT=150.000000`，分频自动 4/3 |
 | BD 语义 diff | ✅ 精确报出新增 cell、`NUM_MI 1→2`、新增地址 `0x41240000` |
 | 日志诊断（注入 41-759） | ✅ 给出修复动作并指向 `pitfalls.md` B3 |
-| MCP 端到端 | ✅ 6 工具可列；`vac_build`/`vac_bd_diff`/`vac_check_handoff`/`vac_recipe_render` 返回结构化结果 |
+| MCP 端到端 | ✅ 6 工具可列；`vac_build`/`vac_bd_diff`/`vac_check_handoff`/`vac_ps7_render` 返回结构化结果 |
 | 干净 clone 端到端 | ✅ 退出码 0，`RESULT: PASS` |
 | 新助手仅凭文档完成任务 | ✅ 加 AXI GPIO + 重建 BD，0 CRITICAL |
 | PS7 声明式（yaml→Tcl→构建） | ✅ `fclk0: 150` 构建后回读 `ACT=150.000000`，0 CRITICAL |
-| 跨版本升级（同版本往返） | ✅ 导出新真源，`bd_diff` 报 `no semantic changes`，重建 BD PASS |
-| 测试 | ✅ **75 个用例**（Python 3.9–3.12，CI 双平台） |
+| 测试 | ✅ **66 个用例**（Python 3.9–3.12，CI 双平台） |
 
-> 详细记录：[`docs/verification.md`](docs/verification.md)；可用性测试与修复：[`docs/usability.md`](docs/usability.md)；
-> 全量功能审计（v0.3.1）：[`docs/audit-2026-11-02.md`](docs/audit-2026-11-02.md)。
+> 构建与校验细节见 [`references/`](references/)；示例见 [`examples/`](examples/)。
 
 > 依赖：Python ≥ 3.9（脚本与 MCP 全部使用标准库，无需 `pip install`）+ Vivado 2020.2（实跑构建时）。`pytest` 可选，仓库测试用标准库 `unittest`。
+
 ## 4. 快速开始
 
 ### 4.1 作为技能安装（给 AI 助手用）
@@ -151,21 +146,16 @@ scripts/build.ps1 -ProjectRoot . -RebuildScript vivado/rebuild_vac.tcl -StopAfte
 ├── SKILL.md                 # 技能入口：铁律、决策树、工具表、按需加载 references
 ├── references/
 │   ├── ps7-config.md        # PS7 配置配方（时钟/HP/IRQ/MIO/DDR）+ 验证
-│   ├── bd-patterns.md       # BD 即 TCL：回写、幂等补丁、地址、bd_diff、recipe
+│   ├── bd-patterns.md       # BD 即 TCL：回写、幂等补丁、地址、bd_diff
 │   ├── build-pipeline.md    # 九阶段、分级验证、日志门禁、目录约定
 │   ├── pitfalls.md          # 症状→根因→检查命令（20+ 条）
-│   ├── version-upgrade.md   # 跨 Vivado 版本升级流程
 │   └── pynq-handoff.md      # .bit/.hwh、Overlay、FS 校准、一致性检查
 ├── scripts/
 │   ├── build.ps1 / build.sh # 一键构建入口（探测 Vivado、日志门禁）
 │   ├── bd_export.tcl        # write_bd_tcl 回写 + 自动存档
-│   ├── bd_patch_template.tcl# 幂等增量补丁模板（可跑通、可重复）
-│   ├── lib/guards.tcl       # 幂等守卫库
-│   ├── recipe.py            # 参数化补丁渲染器
-│   ├── recipes/             # 5 个补丁模板
+│   ├── lib/guards.tcl       # 幂等守卫库（+ guard_loader.tcl 载入器）
 │   ├── bd_diff.py           # BD 语义 diff
 │   ├── ps7_config.py        # 声明式 PS7 配置（yaml → Tcl）
-│   ├── bd_upgrade.tcl       # 跨 Vivado 版本升级 BD
 │   ├── check_build.py       # 日志门禁 + --explain 诊断
 │   └── check_handoff.py     # BD ↔ .hwh ↔ .bit 一致性
 ├── mcp/
@@ -177,9 +167,9 @@ scripts/build.ps1 -ProjectRoot . -RebuildScript vivado/rebuild_vac.tcl -StopAfte
 ├── examples/zynq7020-min/   # 可跑通的最小示例（PS7 + DMA 自环，零引脚约束）
 ├── examples/ps7/            # 声明式 PS7 配置示例
 ├── examples/real-project-adoption/  # 真实工程接入模板
-├── tests/                   # 74 个单元/协议测试（不需要 Vivado）
+├── tests/                   # 66 个单元/协议测试（不需要 Vivado）
 ├── .github/workflows/ci.yml # 双平台 × Python 3.9/3.12
-└── docs/                    # 验证记录、可用性测试、自托管 CI 模板
+└── docs/                    # 自托管 CI 模板
 ```
 
 ## 6. 核心约定（不遵守就会复现老问题）
