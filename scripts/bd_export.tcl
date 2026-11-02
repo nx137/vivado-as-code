@@ -10,7 +10,7 @@
 #          <project.xpr> <bd_name> <out_tcl> [archive_dir]
 # 用法（GUI Tcl Console，工程已打开时）：
 #   source scripts/bd_export.tcl
-#   bd_export "" design_1 tcl/bd_design_1.tcl
+#   bd_export "" design_1 tcl/design_1.tcl
 #
 # 退出码：0 成功；1 失败
 # =============================================================================

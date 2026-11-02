@@ -12,42 +12,77 @@
 
 | 检查项 | 结果 |
 |---|---|
-| 构建退出码 | 0 |
+| 构建退出码 | 0（耗时 0.5 分钟） |
 | 日志 CRITICAL WARNING | **0** |
-| 导出的 BD 里出现 `axi_gpio_user` | ✅（`create_bd_cell ... axi_gpio_user`） |
-| `.hwh` 里出现该 IP | ✅（57 处引用） |
-| 幂等性（补丁跑 1 次 vs 2 次的导出 BD） | ✅ **哈希一致** |
-| 助手是否需要"猜"关键步骤 | 基本不需要：它直接复制 `bd_patch_template.tcl` 改 IP 参数 |
+| 导出的 BD 里出现 `axi_gpio_user` | ✅（`create_bd_cell ... axi_gpio_user` + 地址 `0x41240000`） |
+| `.hwh` 里出现该 IP | ✅（57 行命中 `INSTANCE="axi_gpio_user"`） |
+| 幂等性（同一次构建内补丁跑 1 次 vs 2 次） | ✅ **导出 BD 哈希一致** |
+| 是否需要"猜"关键步骤 | 需要 4 处（见下），已全部修复 |
 
-## 暴露的文档缺口（已修复）
+## 暴露的问题与修复
 
 ### 1. 补丁复制到工程 `tcl/` 后找不到 `guards.tcl`（已修复）
 
-助手把 `bd_patch_template.tcl` 复制成 `<proj>/tcl/patch_add_gpio.tcl` 后，
-模板只按"补丁脚本同级 `lib/guards.tcl`"查找，于是它不得不手工把
-`scripts/lib/guards.tcl` 再复制到 `<proj>/tcl/lib/`。
-文档没写这一步。
+现象：按 `references/bd-patterns.md` §4.1 把补丁放进 `<proj>/tcl/`，直接报
+`invalid command name "vac_ensure_ip"`（Vivado 退出码 1 / 脚本 2，提示指不到根因）。
+测试助手只能自己把 `scripts/lib/guards.tcl` 复制到 `tcl/lib/` 才跑通。
 
-**修复**：模板的守卫库查找顺序扩展为
-`$env:VAC_GUARDS_TCL` → `./lib/guards.tcl` → `./guards.tcl` →
-`../scripts/lib/guards.tcl` → `../../scripts/lib/guards.tcl` → `$pwd/scripts/lib/guards.tcl`，
-并在全部失败时打印已尝试路径与解决办法。
+修复：
+- `bd_patch_template.tcl` 的守卫库查找顺序扩展为 6 个位置：
+  `$env:VAC_GUARDS_TCL` → `./lib/guards.tcl` → `./guards.tcl` →
+  `../scripts/lib/guards.tcl` → `../../scripts/lib/guards.tcl` → `$pwd/scripts/lib/guards.tcl`；
+- 全部失败时打印"已尝试路径 + 解决办法"；
+- `SKILL.md` 决策树与 `bd-patterns.md` §4.1 写明放置约定。
 
-### 2. 快速上手的 `cp` 目标目录不存在（已修复）
+### 2. `VAC_PATCH_TCL` 的相对路径按 Vivado 当前目录解析（已修复）
 
-`cp templates/rebuild.tcl myproj/vivado/rebuild.tcl` 在 `myproj/vivado/` 不存在时会失败。
-**修复**：所有文档的快速上手都先 `mkdir -p myproj/vivado`，并补上"把 `scripts/` 一起复制进工程"的可选步骤。
+现象：`build.ps1` 不改变工作目录，`rebuild.tcl` 用 `file normalize` 相对 Vivado 的 cwd 解析，
+于是 `VAC_PATCH_TCL=tcl/patch_add_gpio.tcl` 找不到文件。
 
-### 3. `check_handoff.py` 对 `.hwh` 的解析过严（已修复）
+修复：`rebuild.tcl` 对 `VAC_PATCH_TCL` / `VAC_POST_BD_TCL` / `VAC_BD_TCL` 的
+**相对路径统一按项目根目录解析**；文档同步说明。
 
-`.hwh` 的 `<MODULE>` 属性顺序不固定（`COREREVISION` 在前），原正则要求 `FULLNAME` 紧跟 `<MODULE`，
-导致正例被误判为"0 个 MODULE"。**修复**：改为 `<MODULE\b[^>]*?\bFULLNAME="/([^"]+)"`，
-并用真实 `.hwh` 做了正例/负例验证。
+### 3. 模板的"双通道全输出"少一半，且回读不足（已修复）
+
+现象：`bd_patch_template.tcl` 只设了 `C_ALL_OUTPUTS`，漏了 `C_ALL_OUTPUTS_2`
+（第二通道仍是双向）；`vac_verify_prop` 只回读 `C_GPIO_WIDTH`，违反自家铁律"重要属性必须回读"。
+
+修复：补上 `C_ALL_OUTPUTS_2 {1}`，并回读 5 个属性
+（`C_GPIO_WIDTH` / `C_GPIO2_WIDTH` / `C_IS_DUAL` / `C_ALL_OUTPUTS` / `C_ALL_OUTPUTS_2`）。
+
+### 4. 幂等性验证的写法不成立（已修复文档）
+
+现象：文档写"连跑两次 build，对比导出的 BD"。但默认每次都是**干净重建**，
+补丁永远打在干净 BD 上，两次结果天然一致——这个写法验证不了幂等。
+
+修复：正确写法是让**同一次构建**把补丁跑两遍：
+
+```bash
+VAC_PATCH_TCL="tcl/patch_add_gpio.tcl,tcl/patch_add_gpio.tcl" \
+VAC_EXPORT_BD=bd_exported.tcl ./scripts/build.ps1 -ProjectRoot . -StopAfter bd
+```
+
+`V2` 与示例 README 都已改成这个写法。
+
+### 5. `StopAfter=bd` 也会生成 `.hwh`（已补充说明）
+
+文档原来只列全量产物，容易误以为 BD 阶段没有 `.hwh`。实际上
+`generate_target all` 会在 `.gen/.../hw_handoff/` 生成 `.hwh` 并复制到 `outputs/`，
+可用于 PYNQ 地址验证。`SKILL.md` 已注明。
+
+### 6. 示例 BD 文件名不一致（已统一）
+
+`scripts/bd_export.tcl`、`bd_patch_template.tcl` 的注释里写 `tcl/bd_design_1.tcl`，
+而默认约定是 `tcl/design_1.tcl`。已统一；`README.md` 里提到原竞赛工程历史文件名的地方保留（那是事实）。
+
+## 其它已知显示问题（非阻塞）
+
+- **PowerShell 5.1 控制台看中文日志会乱码**：Vivado 输出 UTF-8 字节，PS 5.1 控制台按 GBK 解码。
+  日志**文件**本身是 UTF-8，`check_build.py` 读取正常；关键结论看
+  `outputs/build_manifest.json`、`build.log` 与退出码，不要依赖控制台回显。
 
 ## 结论
 
-- 文档的"决策树 + 模板 + 守卫库"路径是有效的：新助手在**没有口头提示**的情况下完成了任务；
-- 最需要的不是更多说明，而是**更聪明的路径解析**和**可执行的检查器**——
-  这正是本次修掉的三处；
-- 剩余改进空间：把 `patch_add_gpio` 这类高频补丁做成 `scripts/recipes/` 预设，
-  让助手"选一个 + 改参数"而不是"抄模板再改"。
+- 文档的"决策树 + 模板 + 守卫库"路径有效：新助手在无口头提示下完成了任务；
+- 最有价值的改进不是增加说明，而是**更聪明的路径解析**、**更完整的回读**、
+  以及**能真正证伪的验证写法**（同轮双跑补丁）。

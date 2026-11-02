@@ -53,6 +53,7 @@ scripts/build.ps1 -ProjectRoot myproj                    # 全量出 bit
 
 产物：`outputs/<top>.bit`、`outputs/<top>.hwh`、`outputs/build_manifest.json`、
 `outputs/timing_summary.txt`、`outputs/utilization.txt`。
+注意：`StopAfter=bd` 时也会生成 `.hwh`（但没有 `.bit`），可直接拿去做 PYNQ 的地址验证。
 
 ## 决策树：要做哪类改动？
 
@@ -61,7 +62,7 @@ scripts/build.ps1 -ProjectRoot myproj                    # 全量出 bit
 | 改 PS 时钟 / PLL / 分频 | `set_property CONFIG.PCW_FPGA0_PERIPHERAL_FREQMHZ {150} [get_bd_cells processing_system7_0]`，回读 `PCW_ACT_*` 验证 | `references/ps7-config.md` |
 | 新开 DDR 高速口 / 加第二个 DMA | `CONFIG.PCW_USE_S_AXI_HP1 {1}` + 独立 interconnect | `references/ps7-config.md` |
 | 打开 PL→PS 中断 | `PCW_USE_FABRIC_INTERRUPT=1`、`PCW_IRQ_F2P_INTR=1` + `axi_intc` | `references/ps7-config.md` |
-| 加一个外设 IP（GPIO/UART/DMA…） | 写幂等补丁脚本，挂到 `VAC_PATCH_TCL` | `references/bd-patterns.md` + `scripts/bd_patch_template.tcl` |
+| 加一个外设 IP（GPIO/UART/DMA…） | 写幂等补丁脚本，挂到 `VAC_PATCH_TCL`；补丁复制进工程时把 `scripts/lib/guards.tcl` 放到 `scripts/lib/` 或 `tcl/lib/` | `references/bd-patterns.md` + `scripts/bd_patch_template.tcl` |
 | 加/改 RTL 模块 | 放 `src/`，BD 里 `create_bd_cell -type module -reference` | `references/bd-patterns.md` |
 | 从 GUI 改完 BD 回写真源 | `scripts/bd_export.tcl`（自动存档旧版本） | `references/bd-patterns.md` |
 | 构建失败 / 时序不过 / 硬件不工作 | 按"症状 → 根因 → 检查命令"查表 | `references/pitfalls.md` |
@@ -87,8 +88,8 @@ scripts/build.ps1 -ProjectRoot myproj                    # 全量出 bit
 | `VAC_TOP` | `design_1_wrapper` | 顶层 module |
 | `VAC_STOP_AFTER` | `impl` | `bd` / `synth` / `impl` |
 | `VAC_BD_TCL` | `<root>/tcl/<bd>.tcl` | BD 真源 |
-| `VAC_PATCH_TCL` | 空 | 逗号分隔的补丁脚本，按顺序执行 |
-| `VAC_POST_BD_TCL` | 空 | 补丁之后的属性覆盖（如改 PS 时钟） |
+| `VAC_PATCH_TCL` | 空 | 逗号分隔的补丁脚本，按顺序执行；**相对路径按项目根目录解析**（如 `tcl/patch_add_gpio.tcl`） |
+| `VAC_POST_BD_TCL` | 空 | 补丁之后的属性覆盖（如改 PS 时钟），相对路径同样按项目根解析 |
 | `VAC_EXPORT_BD` | 空 | 设了就导出"改动后的 BD"到 `outputs/` |
 | `VAC_COPY_TO` / `VAC_ARTIFACT_NAME` | 空 | 把产物复制到部署目录并可改名 |
 | `VAC_JOBS` | `8` | 并行任务数 |

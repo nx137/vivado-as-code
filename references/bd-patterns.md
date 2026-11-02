@@ -88,6 +88,27 @@ myproj/
    不能因为"该 pin 已有 net"就报错；正确语义是：把空闲 pin 接到那个 net 上。
 4. **重要属性回读**（`vac_verify_prop`）：Vivado 对写错的 IP 参数名只报 `CRITICAL WARNING` 并静默用默认值。
 
+### 4.2.1 怎么验证幂等（别用错方法）
+
+❌ 错误方法："跑两次 build，对比导出的 BD 一致"——每次构建都是**干净重建**，
+补丁永远打在干净 BD 上，两次结果天然一致，验证不了任何东西。
+
+✅ 正确方法：让**同一次构建**把补丁跑两遍：
+
+```bash
+VAC_PATCH_TCL="tcl/patch_add_gpio.tcl,tcl/patch_add_gpio.tcl" \
+VAC_EXPORT_BD=bd_exported.tcl \
+  scripts/build.ps1 -ProjectRoot . -StopAfter bd
+```
+
+第二次执行时补丁应打印"已连接，跳过扩互连与地址分配"，且导出结果与只跑一次时**逐字节一致**：
+
+```bash
+# 对照组（只跑一次）
+VAC_PATCH_TCL="tcl/patch_add_gpio.tcl" VAC_EXPORT_BD=bd_exported.tcl scripts/build.ps1 -ProjectRoot . -StopAfter bd
+sha256sum outputs/bd_exported.tcl     # 两次的哈希应相同
+```
+
 ### 4.3 两个 Vivado Tcl 的坑（本项目实测）
 
 ```tcl
@@ -138,7 +159,6 @@ assign_bd_address -offset 0x00000000 -range 0x40000000 \
 `scripts/check_handoff.py` 和 `.hwh` 对照检查。
 
 ### 4.6 外部端口与 XDC 端口漂移
-
 `make_bd_intf_pins_external` / `make_bd_pins_external` 生成顶层端口后，
 XDC 才能约束它们。**BD 大改后端口名可能变**（如 `gpio_io_o_0` → `gpio_io_o_1`），
 XDC 找不到端口时 Vivado 只报 CRITICAL WARNING，约束静默失效。

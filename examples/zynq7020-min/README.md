@@ -3,6 +3,9 @@
 这个示例证明"**TCL 建 BD → 导出真源 → 全量重建 → 出 bit**"这条链路可用，
 故意不依赖任何开发板的引脚定义，因此在任意 `xc7z020clg400-2` 板子上都能跑完。
 
+> 维护提示：本目录的 `vivado/rebuild.tcl` 是 `templates/rebuild.tcl` 的**副本**（为了让示例
+> 单独拷走也能跑）。改动模板后请重新复制一次，保持两者一致。
+
 ## 设计内容
 
 ```
@@ -61,8 +64,14 @@ $env:VAC_POST_BD_TCL = (Resolve-Path tcl/post_fclk150.tcl)
 
 ```bash
 # 加一个 AXI GPIO（幂等补丁，可重复执行）
-$env:VAC_PATCH_TCL = (Resolve-Path ../../scripts/bd_patch_template.tcl)
-$env:VAC_EXPORT_BD = "bd_exported.tcl"     # 导出补丁后的 BD，便于 diff
+$env:VAC_PATCH_TCL = "tcl/patch_add_gpio.tcl"     # 相对路径按项目根解析
+Copy-Item ../../scripts/bd_patch_template.tcl tcl\patch_add_gpio.tcl
+New-Item -ItemType Directory -Force tcl\lib | Out-Null
+Copy-Item ../../scripts/lib/guards.tcl tcl\lib\guards.tcl
+$env:VAC_EXPORT_BD = "bd_exported.tcl"             # 导出补丁后的 BD，便于 diff
 ../../scripts/build.ps1 -ProjectRoot . -StopAfter bd
-# 连跑两次，outputs/bd_exported.tcl 应完全一致（幂等性验证）
+
+# 幂等性验证：让"同一次构建"把补丁跑两遍，导出结果应完全一致
+$env:VAC_PATCH_TCL = "tcl/patch_add_gpio.tcl,tcl/patch_add_gpio.tcl"
+../../scripts/build.ps1 -ProjectRoot . -StopAfter bd
 ```

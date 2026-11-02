@@ -21,6 +21,7 @@
 #   VAC_BD_TCL         BD 全量 TCL（默认 <root>/tcl/<bd_name>.tcl）
 #   VAC_BD_NAME        Block Design 名（默认 design_1）
 #   VAC_PATCH_TCL      可选增量补丁，逗号分隔，按顺序在 BD 之后执行
+#                      （相对路径按项目根目录解析，如 tcl/patch_add_gpio.tcl）
 #   VAC_POST_BD_TCL    可选，补丁之后再执行（属性覆盖等）
 #   VAC_OUT_DIR        产物目录（默认 <root>/outputs）
 #   VAC_COPY_TO        可选，把 .bit/.hwh 复制到该目录
@@ -78,7 +79,17 @@ set proj_dir      [file join $root $proj_name]
 set patches {}
 foreach p [split $patch_raw ",;"] {
     set p [string trim $p]
-    if {$p ne ""} { lappend patches [file normalize $p] }
+    if {$p eq ""} { continue }
+    # 相对路径按"项目根目录"解析，而不是按 Vivado 的当前目录
+    if {[file pathtype $p] ne "absolute"} { set p [file join $root $p] }
+    lappend patches [file normalize $p]
+}
+
+if {$post_bd_tcl ne "" && [file pathtype $post_bd_tcl] ne "absolute"} {
+    set post_bd_tcl [file normalize [file join $root $post_bd_tcl]]
+}
+if {[file pathtype $bd_tcl] ne "absolute"} {
+    set bd_tcl [file normalize [file join $root $bd_tcl]]
 }
 
 if {![string match "bd" $stop_after] && ![string match "synth" $stop_after] && ![string match "impl" $stop_after]} {

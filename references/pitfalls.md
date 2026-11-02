@@ -18,7 +18,7 @@
 
 | # | 症状 | 根因 | 检查 | 修复 |
 |---|---|---|---|---|
-| B1 | 补丁跑第二次出现 cell 重名/`NUM_MI` 变成 3 | 脚本不幂等：`create_bd_cell` 重复执行、`NUM_MI+1` 每次叠加 | 连跑两次补丁对比导出的 BD TCL | 用 `vac_ensure_ip`；把"扩互连+接线+分地址"整体用"S_AXI 是否已连接"判断 |
+| B1 | 补丁跑第二次出现 cell 重名/`NUM_MI` 变成 3 | 脚本不幂等：`create_bd_cell` 重复执行、`NUM_MI+1` 每次叠加 | 同一轮构建里 `VAC_PATCH_TCL="p.tcl,p.tcl"`（不是跑两次 build） | 用 `vac_ensure_ip`；把"扩互连+接线+分地址"整体用"S_AXI 是否已连接"判断 |
 | B2 | `validate_bd_design` 报 `BD 41-758 clock pins not connected` | 漏连 `M_AXI_GP0_ACLK` / `S_AXI_HP0_ACLK` | `get_bd_pins -of_objects [get_bd_cells ...] -filter {TYPE==clk}` | 把每个 AXI 端口的 ACLK 都连到 FCLK |
 | B3 | `41-759 input pins tied to all 0's` | AXI Interconnect 每端口 `S00_ARESETN/M00_ARESETN` 未连（只连了 `ARESETN`） | `connect_bd_net` 是否覆盖了每端口复位 | 逐口连，或 `CONFIG.HAS_ARESETN {0}` |
 | B4 | BD 大改后 XDC 约束"失效"，但构建不报错 | 顶层端口名漂移（`gpio_io_o_0`→`_1`），XDC 找不到端口只报 CRITICAL | `get_bd_ports` 对比 XDC 里的端口名 | 更新 XDC；构建后用 `check_build.py` 兜底 |

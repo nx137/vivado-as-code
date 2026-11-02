@@ -2,7 +2,7 @@
 # bd_patch_template.tcl —— 幂等增量补丁模板（照抄改这一段）
 # -----------------------------------------------------------------------------
 # 适用场景：
-#   已有可用的全量 BD（tcl/bd_design_1.tcl），现在要"加一个外设"，
+#   已有可用的全量 BD（tcl/design_1.tcl），现在要"加一个外设"，
 #   但不想每次都在 GUI 里点。做法：写一个补丁脚本，在 rebuild.tcl 里用
 #   VAC_PATCH_TCL 挂上去，每次全量重建都自动生效。
 #
@@ -24,7 +24,13 @@
 #   2) 手动单跑：vivado -mode batch -source scripts/bd_patch_template.tcl
 #   3) GUI Tcl Console：source scripts/bd_patch_template.tcl
 #
-# 验证幂等：同一补丁连跑两次，用 VAC_EXPORT_BD 导出的 BD TCL 应完全一致。
+# 依赖：scripts/lib/guards.tcl（模板会自动在 6 个位置查找；也可用 VAC_GUARDS_TCL 指定），
+#       若把补丁复制到 <proj>/tcl/，把 guards.tcl 放到 <proj>/scripts/lib/ 或 <proj>/tcl/lib/。
+#
+# 验证幂等（正确做法）：让**同一次构建**把补丁跑两遍——
+#   VAC_PATCH_TCL="tcl/patch_add_gpio.tcl,tcl/patch_add_gpio.tcl" \
+#   VAC_EXPORT_BD=bd_exported.tcl
+# 两次导出的 BD 应完全一致。只跑两次 build 不算验证：每次都是干净重建，天然一致。
 # =============================================================================
 
 # ---- 载入守卫库（相对本脚本定位，避免依赖当前目录）----------------------
@@ -67,10 +73,11 @@ puts "  \[patch\] 当前 BD: $_bd"
 # 注意：GPIO 宽度、双通道等参数写在 -dict 里；实例名一旦定了就别改，
 #       因为 PYNQ 侧代码是按实例名取 IP 的。
 set gpio [vac_ensure_ip xilinx.com:ip:axi_gpio:2.0 axi_gpio_user {
-    CONFIG.C_GPIO_WIDTH  {8}
-    CONFIG.C_GPIO2_WIDTH {8}
-    CONFIG.C_ALL_OUTPUTS {1}
-    CONFIG.C_IS_DUAL     {1}
+    CONFIG.C_GPIO_WIDTH    {8}
+    CONFIG.C_GPIO2_WIDTH   {8}
+    CONFIG.C_IS_DUAL       {1}
+    CONFIG.C_ALL_OUTPUTS   {1}
+    CONFIG.C_ALL_OUTPUTS_2 {1}
 }]
 
 # ---- 3. 判断补丁是否已经跑过 -------------------------------------------
@@ -125,10 +132,15 @@ if {$already_wired} {
 }
 
 # ---- 6. 重要属性回读（防"参数名写错静默取默认值"）---------------------
-vac_verify_prop axi_gpio_user CONFIG.C_GPIO_WIDTH {8}
+# 双通道 GPIO 至少回读 4 个属性：位宽、是否双通道、两个通道的方向
+vac_verify_prop axi_gpio_user CONFIG.C_GPIO_WIDTH    {8}
+vac_verify_prop axi_gpio_user CONFIG.C_GPIO2_WIDTH   {8}
+vac_verify_prop axi_gpio_user CONFIG.C_IS_DUAL       {1}
+vac_verify_prop axi_gpio_user CONFIG.C_ALL_OUTPUTS   {1}
+vac_verify_prop axi_gpio_user CONFIG.C_ALL_OUTPUTS_2 {1}
 
 # ---- 7. 收尾：校验 + 保存 ----------------------------------------------
 # 注意：补丁只是"改当前工程的 BD"，要得到可复现的 bit 必须**重跑全量重建**。
-#       稳定后建议用 scripts/bd_export.tcl 把 BD 固化回 tcl/bd_design_1.tcl。
+#       稳定后建议用 scripts/bd_export.tcl 把 BD 固化回 tcl/design_1.tcl。
 vac_finalize $_bd
 puts "  \[patch\] 完成。请重跑 vivado/rebuild.tcl 验证可复现性。"
