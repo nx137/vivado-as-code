@@ -27,8 +27,8 @@ import re
 # BD TCL: create_bd_cell -type ip -vlnv <vlnv> <instance>
 BD_IP_RE = re.compile(r"create_bd_cell\s+-type\s+ip\s+-vlnv\s+\S+\s+(\S+)")
 BD_MOD_RE = re.compile(r"create_bd_cell\s+-type\s+module\s+-reference\s+(\S+)\s+(\S+)")
-# .hwh: <MODULE FULLNAME="/axi_dma_0" ...>
-HWH_MOD_RE = re.compile(r'<MODULE\s+FULLNAME="/([^"]+)"')
+# .hwh: <MODULE COREREVISION="23" FULLNAME="/axi_dma_0" ...>（属性顺序不固定）
+HWH_MOD_RE = re.compile(r'<MODULE\b[^>]*?\bFULLNAME="/([^"]+)"')
 
 
 def parse_args() -> argparse.Namespace:

@@ -49,16 +49,18 @@ git clone https://github.com/nx137/vivado-as-code ~/.dsh/skills/vivado-as-code
 ### 3.2 直接当模板用（不需要 AI）
 
 ```bash
-cp -r templates/project-skeleton myproj
+mkdir -p myproj/vivado
+cp -r templates/project-skeleton/. myproj/
 cp templates/rebuild.tcl myproj/vivado/rebuild.tcl
+cp -r scripts myproj/scripts            # 可选：工程自带工具链
 
 # 已有工程：把 BD 导出成真源
 vivado -mode batch -source scripts/bd_export.tcl -tclargs \
     old_project.xpr design_1 myproj/tcl/design_1.tcl
 
-# 构建
-scripts/build.ps1 -ProjectRoot myproj -StopAfter bd   # 只验 BD（约 1 分钟）
-scripts/build.ps1 -ProjectRoot myproj                  # 全量出 bit
+# 构建（脚本在仓库里，或已复制进工程）
+./scripts/build.ps1 -ProjectRoot myproj -StopAfter bd   # 只验 BD（约 1 分钟）
+./scripts/build.ps1 -ProjectRoot myproj                  # 全量出 bit
 ```
 
 Linux/macOS：`scripts/build.sh -p myproj -s bd`。

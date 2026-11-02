@@ -3,8 +3,10 @@
 复制本目录到你的工程根目录，然后：
 
 ```bash
-cp -r templates/project-skeleton myproj
+mkdir -p myproj/vivado
+cp -r templates/project-skeleton/. myproj/
 cp templates/rebuild.tcl myproj/vivado/rebuild.tcl
+cp -r scripts myproj/scripts          # 可选：让工程自带构建/检查脚本
 ```
 
 ## 目录约定

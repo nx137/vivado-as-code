@@ -88,6 +88,8 @@ CONFIG.PCW_FCLK0_PERIPHERAL_DIVISOR1 {3}
 
 ## V7 — 技能加载
 
-`git clone` 到 `~/.claude/skills/vivado-as-code` 与 `~/.dsh/skills/vivado-as-code`：
-`SKILL.md` 位于目录根、frontmatter 含 `name` / `description` / `license`，
-符合两套技能系统的目录约定（下次会话启动时进入技能目录列表）。
+`git clone --depth 1` 到 `~/.claude/skills/vivado-as-code` 与 `~/.dsh/skills/vivado-as-code`，
+两个目录均含 `SKILL.md`（根级）+ `references/`（5 篇）。
+
+结果：✅ 宿主在下一次会话刷新时**自动把 `vivado-as-code` 加入可用技能列表**，
+说明目录结构与 frontmatter（`name` / `description` / `license`）符合两套技能系统的约定。

@@ -40,8 +40,10 @@ git clone <this-repo> ~/.claude/skills/vivado-as-code     # Claude Code
 git clone <this-repo> ~/.dsh/skills/vivado-as-code        # DeepSeek Harness
 
 # 2) 用模板起一个工程（或改造已有工程：保留 src/ xdc/，把 BD 导出成 tcl/design_1.tcl）
-cp -r templates/project-skeleton/* myproj/
+mkdir -p myproj/vivado
+cp -r templates/project-skeleton/. myproj/
 cp templates/rebuild.tcl myproj/vivado/rebuild.tcl
+cp -r scripts myproj/scripts          # 可选，让工程自带工具链（也能直接用本仓库的 scripts/）
 
 # 3) 构建（自动探测 Vivado；先只验 BD 再全量）
 scripts/build.ps1 -ProjectRoot myproj -StopAfter bd     # Windows，约 1 分钟
